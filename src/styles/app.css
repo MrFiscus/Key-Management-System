@@ -1,0 +1,114 @@
+/* Global polish for the key management app. Component-level styling lives in
+   src/app/theme.ts and src/app/components/primitives.tsx; this file covers the
+   things that can only be set globally. */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-family: 'Roboto', system-ui, sans-serif;
+}
+
+body {
+  /* A single flat, slightly cool page tone. No radial gradients — surfaces
+     lift off the background by elevation, not by a coloured wash. */
+  background-color: #eceef1;
+  font-family: 'Roboto', system-ui, sans-serif;
+}
+
+/* Display serif (Crimson Text) for headings and the wordmark. */
+.font-display {
+  font-family: 'Crimson Text', Georgia, serif;
+}
+
+/* Monospace bits (stamps, dates, figures) get Roboto Mono, keeping them in the
+   brand type family rather than the platform default Tailwind would pull in. */
+.font-mono,
+code, kbd, samp, pre {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+}
+
+::selection {
+  background: rgba(0, 169, 224, 0.24);
+  color: #002e47;
+}
+
+/* Keyboard focus only — mouse clicks shouldn't leave a ring behind. */
+:focus-visible {
+  outline: 2px solid #00a9e0;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Slim scrollbars so wide tables don't get a heavy grey band under them. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c3c8cd transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9ced3;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb5bc;
+  background-clip: content-box;
+}
+
+/* Numbers in tables line up only if the figures are tabular. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────────── */
+
+@keyframes dsu-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes dsu-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dsu-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dsu-expand {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Backdrop fades in a touch slower so it doesn't pop under the panel. */
+.dsu-fade-in  { animation: dsu-fade-in 220ms ease-out; }
+/* Panel: scales up gently from centre with a soft spring settle. */
+.dsu-pop-in   { animation: dsu-pop-in 300ms cubic-bezier(0.22, 1, 0.36, 1); transform-origin: center; }
+.dsu-slide-up { animation: dsu-slide-up 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.dsu-expand   { animation: dsu-expand 160ms ease-out; }
+
+/* Page content settles in when switching tabs. Subtle — this fires a lot. */
+.dsu-view { animation: dsu-fade-in 160ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dsu-fade-in,
+  .dsu-pop-in,
+  .dsu-slide-up,
+  .dsu-expand,
+  .dsu-view {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}

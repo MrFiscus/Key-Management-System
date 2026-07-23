@@ -1,0 +1,5 @@
+/* Official DSU web typefaces, per the DSU Brand Manual:
+   - Crimson Text  → web substitute for Arno Pro (display serif, headings/wordmark)
+   - Roboto        → web body/UI face
+   - Roboto Mono   → brand-family monospace for key stamps, codes, and dates */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500;600&display=swap');

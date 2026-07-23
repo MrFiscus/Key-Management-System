@@ -1,0 +1,141 @@
+// Shared domain types. These mirror supabase/migrations/0001_init.sql — if you
+// change a column there, change it here too.
+
+export interface Person {
+  id: string;
+  fullName: string;
+  email: string | null;
+  employeeId: string | null;
+  department: string | null;
+  building: string | null;
+}
+
+/**
+ * A key *type*, identified by its stamp. Multiple physical copies of one stamp
+ * exist, so several people can hold the same stamp simultaneously — this row is
+ * the cut, not the piece of metal.
+ */
+export interface KeyDef {
+  id: string;
+  keyStamp: string;
+  roomNumber: string | null;
+  roomDescription: string | null;
+  building: string | null;
+  department: string | null;
+  notes: string | null;
+}
+
+/** One issuance of one key to one person. Open (unreturned) means they hold it. */
+export interface Assignment {
+  id: string;
+  personId: string;
+  keyId: string;
+  /** ISO date, yyyy-mm-dd */
+  dateIssued: string;
+  /** ISO date, or null while the key is still out */
+  dateReturned: string | null;
+  numKeys: number;
+  notes: string | null;
+}
+
+/** Everything the app holds in memory at once. */
+export interface Snapshot {
+  people: Person[];
+  keys: KeyDef[];
+  assignments: Assignment[];
+}
+
+/** An assignment joined to its person and key — what the tables actually render. */
+export interface KeyRecord {
+  assignmentId: string;
+  personId: string;
+  personName: string;
+  initials: string;
+  keyId: string;
+  keyStamp: string;
+  roomNumber: string;
+  roomDescription: string;
+  building: string;
+  department: string;
+  dateIssued: string;
+  dateReturned: string | null;
+  numKeys: number;
+  notes: string | null;
+  isActive: boolean;
+}
+
+export type NewPerson = Omit<Person, "id">;
+export type NewKeyDef = Omit<KeyDef, "id">;
+export type NewAssignment = Omit<Assignment, "id">;
+
+/**
+ * Storage contract. Two implementations exist:
+ *   - local.ts    — browser-persisted, used today
+ *   - supabase.ts — Postgres, switches on once credentials are configured
+ * Keeping the app behind this interface is what makes that a one-line swap.
+ */
+export interface DataStore {
+  readonly kind: "local" | "supabase";
+  /** Human-readable description of where data is going, shown in the UI. */
+  readonly label: string;
+
+  load(): Promise<Snapshot>;
+
+  createPerson(input: NewPerson): Promise<Person>;
+  updatePerson(id: string, patch: Partial<NewPerson>): Promise<Person>;
+  deletePerson(id: string): Promise<void>;
+
+  createKey(input: NewKeyDef): Promise<KeyDef>;
+  updateKey(id: string, patch: Partial<NewKeyDef>): Promise<KeyDef>;
+  deleteKey(id: string): Promise<void>;
+
+  createAssignment(input: NewAssignment): Promise<Assignment>;
+  updateAssignment(id: string, patch: Partial<NewAssignment>): Promise<Assignment>;
+  deleteAssignment(id: string): Promise<void>;
+
+  /** Wholesale replace — used by Excel import. */
+  replaceAll(snapshot: Snapshot): Promise<void>;
+}
+
+// ── Derived helpers ───────────────────────────────────────────────────────────
+
+export function initialsOf(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Join a snapshot into the flat rows the tables render. */
+export function toRecords(snap: Snapshot): KeyRecord[] {
+  const peopleById = new Map(snap.people.map((p) => [p.id, p]));
+  const keysById = new Map(snap.keys.map((k) => [k.id, k]));
+
+  const records: KeyRecord[] = [];
+  for (const a of snap.assignments) {
+    const person = peopleById.get(a.personId);
+    const key = keysById.get(a.keyId);
+    // Orphaned assignment (person or key deleted out from under it) — skip
+    // rather than render a half-empty row.
+    if (!person || !key) continue;
+
+    records.push({
+      assignmentId: a.id,
+      personId: person.id,
+      personName: person.fullName,
+      initials: initialsOf(person.fullName),
+      keyId: key.id,
+      keyStamp: key.keyStamp,
+      roomNumber: key.roomNumber ?? "",
+      roomDescription: key.roomDescription ?? "",
+      building: key.building ?? person.building ?? "",
+      department: key.department ?? person.department ?? "",
+      dateIssued: a.dateIssued,
+      dateReturned: a.dateReturned,
+      numKeys: a.numKeys,
+      notes: a.notes,
+      isActive: a.dateReturned === null,
+    });
+  }
+  return records;
+}
