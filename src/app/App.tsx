@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search, Key, X, Users, Database, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu,
+  Search, Key, X, Users, Database, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
 } from "lucide-react";
 
 import type {
   Assignment, DataStore, KeyDef, KeyRecord, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../lib/types";
 import { toRecords } from "../lib/types";
-import { createStore } from "../lib/stores";
+import { createStore, supabaseConfigured, getSupabase } from "../lib/stores";
+import type { Session } from "@supabase/supabase-js";
 import { DSU, appBarFill, font, radius, shadow, todayIso } from "./theme";
 import { Button, HexBg, HexEmptyIcon, Toast, ErrorNote } from "./components/primitives";
 import { AssignmentDialog, AssignmentInput, ConfirmDialog, KeyDialog, PersonDialog, ReturnDialog } from "./components/EntityForms";
@@ -16,12 +17,14 @@ import { RecordsView } from "./views/RecordsView";
 import { DirectoryView } from "./views/DirectoryView";
 import { KeysView } from "./views/KeysView";
 import { DashboardView } from "./views/DashboardView";
+import { KeyMapView } from "./views/KeyMapView";
+import { LoginView } from "./views/LoginView";
 import { DataView } from "./views/DataView";
 import { PersonView } from "./views/PersonView";
 import { KeyView } from "./views/KeyView";
 import type { RowActions, SortCol, SortDir } from "./views/KeyTable";
 
-type NavTab = "dashboard" | "returned" | "keys" | "directory" | "data";
+type NavTab = "dashboard" | "directory" | "keys" | "map" | "returned" | "data";
 
 /** Which dialog, if any, is open. */
 type Dialog =
@@ -44,6 +47,21 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  // ── auth (only relevant when Supabase is configured) ──
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabaseConfigured);
+  const gated = supabaseConfigured && !session;
+
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) { setAuthReady(true); return; }
+    sb.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
+    const { data: sub } = sb.auth.onAuthStateChange((_evt, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => { await getSupabase()?.auth.signOut(); };
 
   const [nav, setNav] = useState<NavTab>("dashboard");
   const [inputVal, setInputVal] = useState("");
@@ -78,8 +96,11 @@ export default function App() {
   }, [store]);
 
   useEffect(() => {
+    // Don't hit the store until the user is signed in (RLS would reject it).
+    if (gated) { setLoading(false); return; }
+    setLoading(true);
     refresh().finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, gated]);
 
   // Close the search dropdown when clicking outside the search field.
   useEffect(() => {
@@ -307,6 +328,7 @@ export default function App() {
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={13} /> },
     { id: "directory", label: "Directory", icon: <Users size={13} /> },
     { id: "keys",      label: "Catalog",   icon: <KeyRound size={13} /> },
+    { id: "map",       label: "Map",       icon: <MapIcon size={13} /> },
     { id: "returned",  label: "Returned",  icon: <Archive size={13} /> },
     { id: "data",      label: "Data",      icon: <Database size={13} /> },
   ];
@@ -314,6 +336,16 @@ export default function App() {
   // On the dashboard landing the search lives in the page body (a large,
   // centred field), so the compact header search is hidden there to avoid two.
   const onDashboardHome = nav === "dashboard" && !current && !searchQuery;
+
+  // ── auth gate (Supabase mode only) ──
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: DSU.gray }}>
+        <p className="text-[13px]" style={{ color: DSU.midGray }}>Loading…</p>
+      </div>
+    );
+  }
+  if (gated) return <LoginView />;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: DSU.gray, fontFamily: font.sans }}>
@@ -635,6 +667,14 @@ export default function App() {
               />
             )}
 
+            {nav === "map" && (
+              <KeyMapView
+                records={activeRecords}
+                onSelectKey={openKey}
+                onSelectPerson={openPerson}
+              />
+            )}
+
             {nav === "data" && (
               <DataView
                 store={store}
@@ -653,8 +693,8 @@ export default function App() {
           className="w-full px-4 sm:px-6 py-2.5 flex items-center justify-between text-[11px] gap-3 flex-wrap"
           style={{ color: "#9a9c9f" }}
         >
-          <span>Facilities Key Management System — Dakota State University</span>
-          <span className="flex items-center gap-1.5">
+          <span>Facilities Key Management System</span>
+          <span className="flex items-center gap-2">
             {store.kind === "local" && (
               <span
                 className="px-1.5 py-px rounded-sm font-medium"
@@ -664,7 +704,21 @@ export default function App() {
                 Local storage
               </span>
             )}
-            Dakota State University · Madison, SD
+            {session?.user?.email && (
+              <>
+                <span className="inline-flex items-center gap-1" title="Signed in">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#3aa76d" }} />
+                  {session.user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border transition-colors hover:bg-[#f2f7fa]"
+                  style={{ borderColor: DSU.lightBorder, color: DSU.navy }}
+                >
+                  <LogOut size={12} /> Sign out
+                </button>
+              </>
+            )}
           </span>
         </div>
       </footer>

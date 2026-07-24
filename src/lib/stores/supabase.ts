@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
-  Assignment, DataStore, KeyDef, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
+  Assignment, DataStore, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
 
 /**
@@ -19,11 +19,21 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export const supabaseConfigured = Boolean(URL && ANON_KEY);
 
-export function createSupabaseClient(): SupabaseClient {
-  if (!supabaseConfigured) {
-    throw new Error("Supabase is not configured; set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+/**
+ * One shared client for the whole app, so the signed-in auth session (stored in
+ * localStorage) rides along on every data query — that's what satisfies the
+ * "authenticated only" Row Level Security. Returns null when Supabase isn't
+ * configured (the app then runs on LocalStore with no login).
+ */
+let client: SupabaseClient | null = null;
+export function getSupabase(): SupabaseClient | null {
+  if (!supabaseConfigured) return null;
+  if (!client) {
+    client = createClient(URL!, ANON_KEY!, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
   }
-  return createClient(URL!, ANON_KEY!);
+  return client;
 }
 
 // ── row <-> domain mapping (snake_case in PG, camelCase in the app) ───────────
@@ -110,7 +120,7 @@ export class SupabaseStore implements DataStore {
   readonly kind = "supabase" as const;
   readonly label = "Supabase (shared)";
 
-  constructor(private client: SupabaseClient = createSupabaseClient()) {}
+  constructor(private client: SupabaseClient = getSupabase()!) {}
 
   async load(): Promise<Snapshot> {
     const [people, keys, assignments] = await Promise.all([
@@ -184,5 +194,29 @@ export class SupabaseStore implements DataStore {
         if (error) throw explain(error);
       }
     }
+  }
+
+  // ── map layout ──────────────────────────────────────────────────────────────
+  // Stored as a single JSONB row (id = 1). See migration 0002_map_layout.sql.
+
+  async loadMapLayout(): Promise<MapLayout> {
+    const { data, error } = await this.client
+      .from("map_layout")
+      .select("data")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) throw explain(error);
+    const payload = (data?.data ?? null) as Partial<MapLayout> | null;
+    return {
+      overrides: payload?.overrides ?? {},
+      locked: Boolean(payload?.locked),
+    };
+  }
+
+  async saveMapLayout(layout: MapLayout): Promise<void> {
+    const { error } = await this.client
+      .from("map_layout")
+      .upsert({ id: 1, data: layout, updated_at: new Date().toISOString() });
+    if (error) throw explain(error);
   }
 }

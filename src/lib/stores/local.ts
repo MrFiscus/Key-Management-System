@@ -1,10 +1,12 @@
 import type {
-  Assignment, DataStore, KeyDef, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
+  Assignment, DataStore, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
+import { EMPTY_MAP_LAYOUT } from "../types";
 import { newId } from "../id";
 import { buildSeed } from "../seed";
 
 const STORAGE_KEY = "dsu-key-mgmt/v1";
+const MAP_KEY = "dsu-key-mgmt/map/v1";
 
 /**
  * Browser-persisted store. Data lives in localStorage on this machine only —
@@ -181,6 +183,26 @@ export class LocalStore implements DataStore {
         "Could not save to browser storage — it may be full. Export to Excel now to avoid losing changes.",
       );
     }
+  }
+
+  // ── map layout ──────────────────────────────────────────────────────────────
+
+  async loadMapLayout(): Promise<MapLayout> {
+    const raw = localStorage.getItem(MAP_KEY);
+    if (!raw) return { ...EMPTY_MAP_LAYOUT, overrides: {} };
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        overrides: parsed?.overrides ?? {},
+        locked: Boolean(parsed?.locked),
+      };
+    } catch {
+      return { ...EMPTY_MAP_LAYOUT, overrides: {} };
+    }
+  }
+
+  async saveMapLayout(layout: MapLayout): Promise<void> {
+    localStorage.setItem(MAP_KEY, JSON.stringify(layout));
   }
 }
 

@@ -1,6 +1,6 @@
 import type { DataStore } from "../types";
 import { LocalStore } from "./local";
-import { SupabaseStore, supabaseConfigured } from "./supabase";
+import { SupabaseStore, supabaseConfigured, getSupabase } from "./supabase";
 
 /**
  * Picks the backend. Today that's always LocalStore; the moment .env gets real
@@ -10,4 +10,4 @@ export function createStore(): DataStore {
   return supabaseConfigured ? new SupabaseStore() : new LocalStore();
 }
 
-export { supabaseConfigured };
+export { supabaseConfigured, getSupabase };

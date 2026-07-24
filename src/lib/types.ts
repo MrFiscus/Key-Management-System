@@ -68,6 +68,28 @@ export type NewPerson = Omit<Person, "id">;
 export type NewKeyDef = Omit<KeyDef, "id">;
 export type NewAssignment = Omit<Assignment, "id">;
 
+// ── Interactive key map ─────────────────────────────────────────────────────────
+
+/** A building box's position/size on the map stage, in stage percentages. */
+export interface MapBoxRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Saved map state. `overrides` only holds boxes the user has moved/resized off
+ * their default; everything else falls back to BUILDING_LAYOUT. `locked` freezes
+ * dragging so the arranged map can't be nudged by accident.
+ */
+export interface MapLayout {
+  overrides: Record<string, MapBoxRect>;
+  locked: boolean;
+}
+
+export const EMPTY_MAP_LAYOUT: MapLayout = { overrides: {}, locked: false };
+
 /**
  * Storage contract. Two implementations exist:
  *   - local.ts    — browser-persisted, used today
@@ -95,6 +117,10 @@ export interface DataStore {
 
   /** Wholesale replace — used by Excel import. */
   replaceAll(snapshot: Snapshot): Promise<void>;
+
+  /** Interactive key-map layout (building position overrides + lock state). */
+  loadMapLayout(): Promise<MapLayout>;
+  saveMapLayout(layout: MapLayout): Promise<void>;
 }
 
 // ── Derived helpers ───────────────────────────────────────────────────────────
