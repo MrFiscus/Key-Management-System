@@ -1,6 +1,6 @@
 # Facilities Key Management
 
-An internal tool for DSU Facilities to keep track of physical keys — who's holding what, which building it belongs to, and when it went out or came back. It replaces the hand-maintained key spreadsheet with something searchable that also shows the whole campus on a map.
+An internal tool for Facilities to keep track of physical keys — who's holding what, which building it belongs to, and when it went out or came back. It replaces the hand-maintained key spreadsheet with something searchable that also shows the whole campus on a map.
 
 By default everything runs in the browser (data lives in `localStorage`), so you can try it without any setup. Point it at a Supabase project and it becomes a shared, logged-in app backed by Postgres instead.
 
@@ -76,5 +76,3 @@ supabase/migrations/ schema + RLS
 public/campus-map.png
 samples/             sample spreadsheet
 ```
-
-Built for DSU Facilities, Madison SD.
