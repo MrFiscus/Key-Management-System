@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, Key, X, Users, Database, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
+  HardDrive,
 } from "lucide-react";
 
 import type {
@@ -10,7 +11,7 @@ import { toRecords } from "../lib/types";
 import { createStore, supabaseConfigured, getSupabase } from "../lib/stores";
 import type { Session } from "@supabase/supabase-js";
 import { DSU, appBarFill, font, radius, shadow, todayIso } from "./theme";
-import { Button, HexBg, HexEmptyIcon, Toast, ErrorNote } from "./components/primitives";
+import { Button, HexBg, SkeletonBar, Toast, ErrorNote } from "./components/primitives";
 import { AssignmentDialog, AssignmentInput, ConfirmDialog, KeyDialog, PersonDialog, ReturnDialog } from "./components/EntityForms";
 import { SearchView } from "./views/SearchView";
 import { RecordsView } from "./views/RecordsView";
@@ -120,6 +121,18 @@ export default function App() {
   // appear on the Returned tab (and in Search, which still spans all history).
   const activeRecords = useMemo(() => records.filter((r) => r.isActive), [records]);
   const returnedRecords = useMemo(() => records.filter((r) => !r.isActive), [records]);
+
+  // Existing building / department values, for the type-ahead fields.
+  const distinct = (vals: (string | null)[]) =>
+    [...new Set(vals.map((v) => (v ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const buildingOptions = useMemo(
+    () => distinct([...snapshot.people.map((p) => p.building), ...snapshot.keys.map((k) => k.building)]),
+    [snapshot],
+  );
+  const departmentOptions = useMemo(
+    () => distinct([...snapshot.people.map((p) => p.department), ...snapshot.keys.map((k) => k.department)]),
+    [snapshot],
+  );
 
   // Resolved fresh each render so edits show immediately, and a deleted entity
   // resolves to null and falls through to the tab view rather than breaking.
@@ -250,6 +263,11 @@ export default function App() {
     else await store.createAssignment(assignmentInput);
     await refresh();
     setToast(existing ? "Assignment updated." : "Key issued.");
+
+    // Returned so multi-entry callers (bulk PDF import) can reuse the
+    // resolved ids instead of re-deriving "new-person"/"new-key" from a
+    // snapshot that hasn't refreshed mid-loop yet.
+    return { personId, keyId };
   };
 
   const returnKey = async (assignmentId: string, dateReturned: string) => {
@@ -564,9 +582,26 @@ export default function App() {
         {loadError && <ErrorNote message={`Could not load data: ${loadError}`} />}
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <HexEmptyIcon />
-            <p className="text-[13px]" style={{ color: DSU.midGray }}>Loading records…</p>
+          <div className="dsu-fade-in" aria-busy="true" aria-label="Loading records">
+            {/* Mirrors the dashboard masthead's shape so the load doesn't jump. */}
+            <div
+              className="relative mb-12 -mx-4 sm:-mx-6 -mt-5 px-4 sm:px-8 lg:px-12 pt-8 pb-14"
+              style={{ background: "#ffffff", boxShadow: shadow.md, borderTop: `2px solid ${DSU.trojan}` }}
+            >
+              <SkeletonBar width={140} height={11} radius={3} />
+              <div className="mt-3"><SkeletonBar width={220} height={56} radius={8} /></div>
+              <div className="mt-3"><SkeletonBar width={300} height={13} /></div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 dsu-stagger">
+              {[0, 1].map((i) => (
+                <div key={i} className="bg-white overflow-hidden p-4" style={{ boxShadow: shadow.md, borderRadius: radius.lg }}>
+                  <SkeletonBar width={130} height={12} radius={3} />
+                  <div className="mt-4 flex flex-col gap-2.5">
+                    {[0, 1, 2, 3].map((j) => <SkeletonBar key={j} height={30} radius={4} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : currentPerson ? (
           <PersonView
@@ -690,18 +725,34 @@ export default function App() {
       {/* ── Footer ── */}
       <footer style={{ borderTop: `1px solid ${DSU.lightBorder}`, background: "rgba(255,255,255,0.75)" }}>
         <div
-          className="w-full px-4 sm:px-6 py-2.5 flex items-center justify-between text-[11px] gap-3 flex-wrap"
+          className="w-full px-4 sm:px-6 py-2.5 flex items-center justify-between text-[11px] gap-x-4 gap-y-1.5 flex-wrap"
           style={{ color: "#9a9c9f" }}
         >
-          <span>Facilities Key Management System</span>
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 flex-wrap">
+            <span
+              className="flex items-center justify-center w-4 h-4 rounded-sm flex-shrink-0"
+              style={{ background: DSU.trojan }}
+              aria-hidden="true"
+            >
+              <Key size={9} color="white" />
+            </span>
+            <span className="font-medium" style={{ color: "#84878c" }}>Facilities Key Management</span>
+            {!loading && !gated && (
+              <span className="tabular" style={{ color: "#b7bac0" }}>
+                · {snapshot.assignments.length.toLocaleString()} records · {snapshot.people.length.toLocaleString()}{" "}
+                people · {snapshot.keys.length.toLocaleString()} keys
+              </span>
+            )}
+          </span>
+
+          <span className="flex items-center gap-2 flex-wrap">
             {store.kind === "local" && (
               <span
-                className="px-1.5 py-px rounded-sm font-medium"
+                className="inline-flex items-center gap-1 px-1.5 py-px rounded-sm font-medium"
                 style={{ background: "#fff3d4", color: "#7a6318" }}
                 title="Data is stored in this browser only and is not shared or backed up."
               >
-                Local storage
+                <HardDrive size={10} /> Local storage
               </span>
             )}
             {session?.user?.email && (
@@ -712,8 +763,10 @@ export default function App() {
                 </span>
                 <button
                   onClick={signOut}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border transition-colors hover:bg-[#f2f7fa]"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border transition-colors"
                   style={{ borderColor: DSU.lightBorder, color: DSU.navy }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = DSU.tintBg)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
                   <LogOut size={12} /> Sign out
                 </button>
@@ -729,6 +782,8 @@ export default function App() {
           person={dialog.person}
           onSave={(input) => savePerson(input, dialog.person)}
           onClose={() => setDialog(null)}
+          buildings={buildingOptions}
+          departments={departmentOptions}
         />
       )}
 

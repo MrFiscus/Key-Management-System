@@ -102,9 +102,6 @@ function explain(error: { code?: string; message: string }): Error {
     if (error.message.includes("keys_identity_key")) {
       return new Error("A key with that stamp, room, and building already exists.");
     }
-    if (error.message.includes("assignments_one_open_per_person_key")) {
-      return new Error("That person already has this key checked out.");
-    }
     return new Error("That record already exists.");
   }
   if (error.code === "23514" && error.message.includes("returned_after_issued")) {

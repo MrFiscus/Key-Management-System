@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { DSU, headerFill, radius, serif, shadow, surface } from "../theme";
 
@@ -11,6 +11,27 @@ export function HexBg() {
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64'%3E%3Cpath d='M28 4L52 18v28L28 60 4 46V18Z' stroke='rgba(255,255,255,0.06)' stroke-width='1' fill='none'/%3E%3C/svg%3E")`,
         backgroundSize: "56px 64px",
+      }}
+    />
+  );
+}
+
+/**
+ * Faint DSU honeycomb texture for light (white) surfaces — the brand manual's
+ * signature hexagon motif, in a barely-there navy tint. Gives a panel some
+ * crafted brand character instead of a flat white void.
+ */
+export function HexWatermark() {
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      aria-hidden="true"
+      style={{
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64'%3E%3Cpath d='M28 4L52 18v28L28 60 4 46V18Z' stroke='rgba(0,65,101,0.05)' stroke-width='1' fill='none'/%3E%3C/svg%3E\")",
+        backgroundSize: "56px 64px",
+        maskImage: "radial-gradient(circle at 50% 42%, #000 0%, rgba(0,0,0,0.55) 55%, transparent 82%)",
+        WebkitMaskImage: "radial-gradient(circle at 50% 42%, #000 0%, rgba(0,0,0,0.55) 55%, transparent 82%)",
       }}
     />
   );
@@ -92,6 +113,21 @@ export function EmptyState({ message }: { message: string }) {
       <HexEmptyIcon />
       <p className="text-[13px] max-w-[420px] text-center px-4" style={{ color: DSU.midGray }}>{message}</p>
     </div>
+  );
+}
+
+/** A shimmering placeholder tile, standing in for text/rows while loading. */
+export function SkeletonBar({
+  width = "100%", height = 14, radius: r = radius.sm, style,
+}: {
+  width?: number | string; height?: number; radius?: number; style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      className="dsu-skeleton"
+      aria-hidden="true"
+      style={{ width, height, borderRadius: r, ...style }}
+    />
   );
 }
 
@@ -286,6 +322,67 @@ export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>
       className={`${fieldClasses} cursor-pointer ${props.className ?? ""}`}
       style={{ ...fieldStyle, ...props.style }}
     />
+  );
+}
+
+/**
+ * Free-text field that suggests existing values as you type. Picking a suggestion
+ * fills it in; typing anything else is kept as-is (so a new value just becomes a
+ * new option the next time). Used for building / department, which are plain
+ * strings, not separate records.
+ */
+export function Combobox({
+  value, onChange, options, placeholder, autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const q = value.trim().toLowerCase();
+  const matches = options
+    .filter((o) => !q || (o.toLowerCase().includes(q) && o.toLowerCase() !== q))
+    .slice(0, 8);
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relative"
+      onBlur={(e) => { if (!wrapRef.current?.contains(e.relatedTarget as Node)) setOpen(false); }}
+    >
+      <TextInput
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        autoComplete="off"
+        className="w-full"
+      />
+      {open && matches.length > 0 && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md overflow-y-auto z-30"
+          style={{ borderColor: DSU.lightBorder, boxShadow: shadow.lg, maxHeight: 200 }}
+        >
+          {matches.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(o); setOpen(false); }}
+              className="block w-full text-left px-3 py-1.5 text-[13px] hover:bg-blue-50"
+              style={{ color: DSU.darkGray }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

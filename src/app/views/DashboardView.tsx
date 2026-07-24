@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Users, ArrowUpRight, ArrowDownLeft, Search, Maximize2, Building2, Briefcase, PieChart, Plus, Undo2 } from "lucide-react";
 import type { KeyRecord, Snapshot } from "../../lib/types";
 import { DSU, formatDate, isStampQuery, radius, font, shadow } from "../theme";
-import { Avatar, Button, Modal, SectionHeader, Stamp } from "../components/primitives";
+import { Avatar, Button, HexWatermark, Modal, SectionHeader, Stamp } from "../components/primitives";
 
 /**
  * Landing page. Answers "what's going on right now" in one screen: how much is
@@ -269,7 +269,7 @@ export function DashboardView({
       {!empty && (
         <div className="mb-14">
           <SectionHeader title="Recent Activity" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 dsu-stagger">
             <Panel
               title="Recently Issued"
               icon={<ArrowUpRight size={13} />}
@@ -319,7 +319,7 @@ export function DashboardView({
       {!empty && (
         <div>
           <SectionHeader title="Breakdown" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 dsu-stagger">
             <Panel title="Keys Out by Building" icon={<Building2 size={13} />}>
               <BarChart rows={buildingBars} color={DSU.navy} empty="No keys out." />
             </Panel>
@@ -376,27 +376,6 @@ export function DashboardView({
 }
 
 // ── pieces ────────────────────────────────────────────────────────────────────
-
-/**
- * Faint DSU honeycomb texture for light surfaces — the brand manual's signature
- * hexagon motif, in a barely-there navy tint. Gives the command panel some
- * crafted brand character instead of a flat white void.
- */
-function HexWatermark() {
-  return (
-    <div
-      className="absolute inset-0 pointer-events-none"
-      aria-hidden="true"
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64'%3E%3Cpath d='M28 4L52 18v28L28 60 4 46V18Z' stroke='rgba(0,65,101,0.05)' stroke-width='1' fill='none'/%3E%3C/svg%3E\")",
-        backgroundSize: "56px 64px",
-        maskImage: "radial-gradient(circle at 50% 42%, #000 0%, rgba(0,0,0,0.55) 55%, transparent 82%)",
-        WebkitMaskImage: "radial-gradient(circle at 50% 42%, #000 0%, rgba(0,0,0,0.55) 55%, transparent 82%)",
-      }}
-    />
-  );
-}
 
 /**
  * A single supporting metric in the masthead row. These sit side by side split
@@ -550,19 +529,34 @@ function MiniTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((cells, i) => (
-            <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : DSU.zebra, borderBottom: "1px solid #eaebec" }}>
-              {cells.map((c, j) => (
-                <td
-                  key={j}
-                  className="px-3 py-1.5 whitespace-nowrap"
-                  style={{ color: DSU.darkGray, textAlign: j === cells.length - 1 && cells.length > 3 ? "right" : "left" }}
-                >
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((cells, i) => {
+            const base = i % 2 === 0 ? "#fff" : DSU.zebra;
+            return (
+              <tr
+                key={i}
+                className="dsu-row-in transition-colors"
+                style={{ background: base, borderBottom: "1px solid #eaebec", animationDelay: `${Math.min(i, 10) * 18}ms` }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#f0f7fc";
+                  e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = base;
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+              >
+                {cells.map((c, j) => (
+                  <td
+                    key={j}
+                    className="px-3 py-1.5 whitespace-nowrap"
+                    style={{ color: DSU.darkGray, textAlign: j === cells.length - 1 && cells.length > 3 ? "right" : "left" }}
+                  >
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
           {more > 0 && (
             <tr>
               <td colSpan={head.length} className="px-3 py-1.5 text-[11px]" style={{ color: DSU.midGray }}>

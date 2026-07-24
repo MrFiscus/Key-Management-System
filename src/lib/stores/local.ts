@@ -155,14 +155,6 @@ export class LocalStore implements DataStore {
     if (a.dateReturned && a.dateReturned < a.dateIssued) {
       throw new Error("Date returned cannot be before date issued.");
     }
-    // Mirrors assignments_one_open_per_person_key. Several people holding the
-    // same stamp is fine; the same person holding it twice at once is not.
-    if (!a.dateReturned) {
-      const clash = this.snap.assignments.find(
-        (x) => x.id !== selfId && x.personId === a.personId && x.keyId === a.keyId && !x.dateReturned,
-      );
-      if (clash) throw new Error("That person already has this key checked out.");
-    }
   }
 
   // ── bulk ────────────────────────────────────────────────────────────────────

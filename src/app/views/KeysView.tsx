@@ -119,10 +119,16 @@ export function KeysView({
                 return (
                   <tr
                     key={k.id}
-                    className="border-b group"
-                    style={{ borderColor: "#eaebec", background: base }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = HOVER_ROW)}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = base)}
+                    className="border-b group transition-colors dsu-row-in"
+                    style={{ borderColor: "#eaebec", background: base, animationDelay: `${Math.min(i, 14) * 16}ms` }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = HOVER_ROW;
+                      e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = base;
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
                   >
                     <td className="px-3 py-2">
                       <Stamp stamp={k.keyStamp} onClick={() => onSelectKey(k.id)} />

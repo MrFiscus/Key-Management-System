@@ -227,6 +227,7 @@ export function DirectoryView({
                     person={person}
                     records={rs}
                     isOpen={expanded.has(person.id)}
+                    index={i}
                     base={i % 2 === 0 ? "#ffffff" : DSU.zebra}
                     onToggle={() => toggle(person.id)}
                     onOpen={() => onSelectPerson(person.id)}
@@ -287,11 +288,12 @@ function Th({
 // ── one person: summary row plus an optional expanded detail row ──────────────
 
 function PersonRows({
-  person, records, isOpen, base, onToggle, onOpen, onEdit, onDelete, onSelectKey, actions,
+  person, records, isOpen, index, base, onToggle, onOpen, onEdit, onDelete, onSelectKey, actions,
 }: {
   person: Person;
   records: KeyRecord[];
   isOpen: boolean;
+  index: number;
   base: string;
   onToggle: () => void;
   onOpen: () => void;
@@ -308,10 +310,21 @@ function PersonRows({
   return (
     <>
       <tr
-        className="border-b group transition-colors"
-        style={{ borderColor: "#eaebec", background: isOpen ? HOVER_ROW : base }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = HOVER_ROW)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = isOpen ? HOVER_ROW : base)}
+        className="border-b group transition-colors dsu-row-in"
+        style={{
+          borderColor: "#eaebec",
+          background: isOpen ? HOVER_ROW : base,
+          animationDelay: `${Math.min(index, 14) * 16}ms`,
+          boxShadow: isOpen ? `inset 3px 0 0 ${DSU.trojan}` : "none",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = HOVER_ROW;
+          e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = isOpen ? HOVER_ROW : base;
+          e.currentTarget.style.boxShadow = isOpen ? `inset 3px 0 0 ${DSU.trojan}` : "none";
+        }}
       >
         {/* Accent runs down the left of the open row and its detail block,
             tying the two together as one unit. */}

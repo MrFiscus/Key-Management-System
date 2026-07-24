@@ -112,10 +112,16 @@ export function KeyTable({
             return (
               <tr
                 key={r.assignmentId}
-                className="border-b transition-colors group"
-                style={{ borderColor: "#eaebec", background: base }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = HOVER_ROW)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = base)}
+                className="border-b transition-colors group dsu-row-in"
+                style={{ borderColor: "#eaebec", background: base, animationDelay: `${Math.min(i, 14) * 16}ms` }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = HOVER_ROW;
+                  e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = base;
+                  e.currentTarget.style.boxShadow = "none";
+                }}
               >
                 {showPerson && (
                   <td className="px-3 py-2 whitespace-nowrap font-medium">

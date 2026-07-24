@@ -89,6 +89,14 @@ code, kbd, samp, pre {
   from { opacity: 0; transform: translateY(-3px); }
   to   { opacity: 1; transform: none; }
 }
+@keyframes dsu-row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dsu-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* Backdrop fades in a touch slower so it doesn't pop under the panel. */
 .dsu-fade-in  { animation: dsu-fade-in 220ms ease-out; }
@@ -100,12 +108,38 @@ code, kbd, samp, pre {
 /* Page content settles in when switching tabs. Subtle — this fires a lot. */
 .dsu-view { animation: dsu-fade-in 160ms ease-out; }
 
+/* Table/list rows fade + rise in on mount, delay set per-row via inline
+   `animationDelay` so long lists still settle within ~250ms. `both` keeps
+   the row invisible before its delay elapses instead of flashing at full
+   opacity first. */
+.dsu-row-in { animation: dsu-row-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Staggers the direct children of a grid/flex container — used for the
+   dashboard's panel groups so they settle in one after another rather than
+   all at once. */
+.dsu-stagger > * { animation: dsu-slide-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dsu-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.dsu-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.dsu-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.dsu-stagger > *:nth-child(4) { animation-delay: 210ms; }
+
+/* Skeleton placeholder — a soft sweep across a neutral tile, standing in for
+   text/rows while the initial load is in flight. */
+.dsu-skeleton {
+  background: linear-gradient(100deg, #e8eaed 30%, #f4f5f7 50%, #e8eaed 70%);
+  background-size: 250% 100%;
+  animation: dsu-shimmer 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dsu-fade-in,
   .dsu-pop-in,
   .dsu-slide-up,
   .dsu-expand,
-  .dsu-view {
+  .dsu-view,
+  .dsu-row-in,
+  .dsu-stagger > *,
+  .dsu-skeleton {
     animation: none;
   }
   * {
