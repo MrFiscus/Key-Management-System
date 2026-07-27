@@ -195,6 +195,43 @@ export function Stamp({
   );
 }
 
+/**
+ * A solid, high-contrast key stamp — for the one column in a table where the
+ * stamp *is* the row's identity (the Catalog's own listing, a person's
+ * "what do they hold" column), rather than one detail among several. Same
+ * click-to-navigate contract as `Stamp`, just louder.
+ */
+export function KeyChip({
+  stamp, onClick, size = 13,
+}: {
+  stamp: string; onClick?: () => void; size?: number;
+}) {
+  const style: React.CSSProperties = {
+    fontSize: size,
+    color: "#ffffff",
+    background: DSU.trojan,
+  };
+  if (!onClick) {
+    return (
+      <span className="font-mono font-bold rounded-md px-2 py-1 inline-block" style={style}>
+        {stamp}
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      title={`View key ${stamp}`}
+      className="font-mono font-bold rounded-md px-2 py-1 transition-colors inline-block"
+      style={style}
+      onMouseEnter={(e) => (e.currentTarget.style.background = DSU.trojanDark)}
+      onMouseLeave={(e) => (e.currentTarget.style.background = DSU.trojan)}
+    >
+      {stamp}
+    </button>
+  );
+}
+
 // ── Buttons ───────────────────────────────────────────────────────────────────
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "dangerSolid";

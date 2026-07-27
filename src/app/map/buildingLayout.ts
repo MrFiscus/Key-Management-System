@@ -9,11 +9,11 @@
 
 import type { MapBoxRect } from "../../lib/types";
 
-/** Design canvas, in px. Matches the source campus map (1275×1650). */
-export const MAP_STAGE = { w: 1275, h: 1650 };
+/** Design canvas, in px. Matches the source campus map (896×1183). */
+export const MAP_STAGE = { w: 896, h: 1183 };
 
-/** Stage aspect ratio (width ÷ height) — from the source campus map, 1275×1650. */
-export const MAP_ASPECT = MAP_STAGE.w / MAP_STAGE.h; // ≈ 0.773
+/** Stage aspect ratio (width ÷ height) — from the source campus map, 896×1183. */
+export const MAP_ASPECT = MAP_STAGE.w / MAP_STAGE.h; // ≈ 0.757
 
 export interface BuildingBox {
   id: string;
@@ -34,35 +34,45 @@ export interface BuildingBox {
   aliases?: string[];
 }
 
+// Recalibrated against the 896×1183 aerial render using the official DSU
+// parking map (numbered 1–32, dsu.edu) as ground truth for each building's true
+// relative position — the two earlier passes were both visual guesswork
+// matching shapes between stylized art with no way to confirm identity; this
+// pass fixes each building's cluster and left-right/north-south order to match
+// the labeled map exactly, then fits that order onto the aerial photo's
+// observed building footprints per cluster (athletic complex, middle corridor,
+// academic/residential core).
 export const BUILDING_LAYOUT: BuildingBox[] = [
-  { id: "fieldhouse", name: "Fieldhouse", x: 58.0, y: 10.0, width: 7.7, height: 9.2 },
-  { id: "madison-cc", name: "Madison Community Center", x: 60.9, y: 13.5, width: 11.1, height: 9.8 },
-  { id: "beacom-premier-complex", name: "Beacom Premier Complex", x: 76.8, y: 9.8, width: 19.6, height: 9.6, aliases: ["beacom premier", "premier complex", "premier", "trojan field"] },
-  { id: "dsu-foundation", name: "DSU Foundation", x: 32, y: 9.5, width: 20, height: 4, aliases: ["foundation", "dsu foundation"] },
-  { id: "prairie-playhouse", name: "Dakota Prairie Playhouse", x: 45.3, y: 21.6, width: 6.0, height: 9.0 },
-  { id: "8plex-1", name: "8 Plex Apartments", x: 22.2, y: 21.3, width: 4.3, height: 4.6 },
-  { id: "8plex-2", name: "8 Plex Apartments", x: 30.1, y: 21.5, width: 4.3, height: 5.5 },
-  { id: "courtyard-lec", name: "Courtyard & Learning Engagement Center (LEC)", x: 41.6, y: 53.2, width: 7.8, height: 11.6 },
-  { id: "residence-village", name: "Residence Village", x: 44.0, y: 64.9, width: 5.3, height: 4.5 },
-  { id: "the-212", name: "The 2-1-2", x: 27.5, y: 67.6, width: 3.1, height: 2.1 },
-  { id: "mundt-library", name: "Karl E. Mundt Library", x: 7.2, y: 74.3, width: 5.3, height: 4.0, aliases: ["mundt", "library"] },
-  { id: "habeger-science", name: "Habeger Science Center", x: 15.8, y: 73.2, width: 8.6, height: 6.8, aliases: ["habeger", "science"] },
-  { id: "tyrrell-physical-plant", name: "Tyrrell Physical Plant", x: 25.9, y: 75.0, width: 4.5, height: 4.4, aliases: ["tyrrell", "physical plant"] },
-  { id: "smith-zimmermann-museum", name: "Smith Zimmermann Museum", x: 32.2, y: 74.7, width: 4.2, height: 2.8, aliases: ["smith zimmermann"] },
-  { id: "higbie-hall", name: "Higbie Hall", x: 38.7, y: 75.3, width: 7.3, height: 1.3, aliases: ["higbie"] },
-  { id: "zimmermann-hall", name: "Zimmermann Hall", x: 48.2, y: 73.9, width: 1.5, height: 4.8, aliases: ["zimmermann"] },
-  { id: "trojan-center", name: "Trojan Center", x: 39.4, y: 78.9, width: 11.6, height: 3.8, aliases: ["trojan center", "tc"] },
-  { id: "trojan-zone-bookstore", name: "Trojan Zone Bookstore", x: 45.6, y: 81.0, width: 5.4, height: 1.7, aliases: ["bookstore", "trojan zone"] },
-  { id: "tunheim-tcb", name: "Tunheim Classroom Building (TCB)", x: 13.3, y: 84.7, width: 4.6, height: 2.4, aliases: ["tunheim", "tcb", "classroom building"] },
-  { id: "beadle-hall", name: "Beadle Hall", x: 20.9, y: 86.0, width: 4.2, height: 2.6, aliases: ["beadle"] },
-  { id: "kennedy-center", name: "Kennedy Center", x: 30.5, y: 84.0, width: 6.8, height: 5.0, aliases: ["kennedy"] },
-  { id: "east-hall", name: "East Hall", x: 44.0, y: 85.2, width: 4.8, height: 3.9 },
-  { id: "cyber-labs", name: "DSU Madison Cyber Labs", x: 5.4, y: 84.4, width: 6.8, height: 9.8, aliases: ["cyber labs", "madison cyber", "mcl"] },
-  { id: "hetton-hall", name: "Heston Hall", x: 56.3, y: 72.8, width: 2.4, height: 4.1, aliases: ["heston", "hetton"] },
-  { id: "emry-hall", name: "Emry Hall", x: 62.0, y: 73.0, width: 5.4, height: 1.8, aliases: ["emry"] },
-  { id: "beacom-institute", name: "Beacom Institute of Technology", x: 55.4, y: 79.8, width: 6.4, height: 8.1, aliases: ["beacom"] },
-  { id: "richardson-hall", name: "Richardson Hall", x: 64.2, y: 78.2, width: 3.0, height: 5.0, aliases: ["richardson"] },
-  { id: "girton-house", name: "Girton House", x: 55.4, y: 90.1, width: 3.7, height: 1.5, aliases: ["girton"] },
+  { id: "fieldhouse", name: "Fieldhouse", x: 57, y: 19, width: 4, height: 6 },
+  { id: "madison-cc", name: "Madison Community Center", x: 60, y: 24, width: 4, height: 6 },
+  { id: "beacom-premier-complex", name: "Beacom Premier Complex", x: 70, y: 9, width: 9, height: 13, aliases: ["beacom premier", "premier complex", "premier", "trojan field"] },
+  { id: "dsu-foundation", name: "DSU Foundation", x: 54, y: 1, width: 10, height: 6, aliases: ["foundation", "dsu foundation"] },
+  { id: "stadium", name: "Stadium", x: 80, y: 13, width: 11, height: 15, aliases: ["brian kern family stadium", "brian kern stadium", "dan beacom track", "track & field", "track and field"] },
+  { id: "prairie-playhouse", name: "Dakota Prairie Playhouse", x: 36, y: 28, width: 9, height: 11 },
+  { id: "8plex-1", name: "8 Plex Apartments", x: 18, y: 30, width: 5, height: 6 },
+  { id: "8plex-2", name: "8 Plex Apartments", x: 24, y: 31, width: 5, height: 7 },
+  { id: "triplex", name: "Tri-plex", x: 31, y: 48, width: 4, height: 5, aliases: ["triplex", "tri plex"] },
+  { id: "courtyard-lec", name: "Courtyard & Learning Engagement Center (LEC)", x: 38, y: 50, width: 9, height: 12 },
+  { id: "residence-village", name: "Residence Village", x: 42, y: 62, width: 5, height: 5 },
+  { id: "the-212", name: "The 2-1-2", x: 20, y: 65, width: 3, height: 3 },
+  { id: "mundt-library", name: "Karl E. Mundt Library", x: 0, y: 71, width: 5, height: 5, aliases: ["mundt", "library"] },
+  { id: "habeger-science", name: "Habeger Science Center", x: 8, y: 70, width: 9, height: 7, aliases: ["habeger", "science"] },
+  { id: "tyrrell-physical-plant", name: "Tyrrell Physical Plant", x: 19, y: 72, width: 5, height: 6, aliases: ["tyrrell", "physical plant"] },
+  { id: "smith-zimmermann-museum", name: "Smith Zimmermann Museum", x: 27, y: 71, width: 4, height: 4, aliases: ["smith zimmermann"] },
+  { id: "higbie-hall", name: "Higbie Hall", x: 32, y: 71, width: 7, height: 2, aliases: ["higbie"] },
+  { id: "zimmermann-hall", name: "Zimmermann Hall", x: 42, y: 70, width: 2, height: 7, aliases: ["zimmermann"] },
+  { id: "trojan-center", name: "Trojan Center", x: 31, y: 77, width: 12, height: 6, aliases: ["trojan center", "tc"] },
+  { id: "trojan-zone-bookstore", name: "Trojan Zone Bookstore", x: 43, y: 79, width: 5, height: 2, aliases: ["bookstore", "trojan zone"] },
+  { id: "tunheim-tcb", name: "Tunheim Classroom Building (TCB)", x: 6, y: 87, width: 5, height: 5, aliases: ["tunheim", "tcb", "classroom building"] },
+  { id: "beadle-hall", name: "Beadle Hall", x: 15, y: 93, width: 4, height: 4, aliases: ["beadle"] },
+  { id: "kennedy-center", name: "Kennedy Center", x: 24, y: 86, width: 7, height: 7, aliases: ["kennedy"] },
+  { id: "east-hall", name: "East Hall", x: 40, y: 92, width: 5, height: 6 },
+  { id: "cyber-labs", name: "DSU Madison Cyber Labs", x: 0, y: 83, width: 7, height: 15, aliases: ["cyber labs", "madison cyber", "mcl"] },
+  { id: "hetton-hall", name: "Heston Hall", x: 54, y: 67, width: 2, height: 6, aliases: ["heston", "hetton"] },
+  { id: "emry-hall", name: "Emry Hall", x: 60, y: 69, width: 5, height: 3, aliases: ["emry"] },
+  { id: "beacom-institute", name: "Beacom Institute of Technology", x: 50, y: 80, width: 6, height: 12, aliases: ["beacom"] },
+  { id: "richardson-hall", name: "Richardson Hall", x: 62, y: 72, width: 3, height: 7, aliases: ["richardson"] },
+  { id: "girton-house", name: "Girton House", x: 53, y: 96, width: 4, height: 2, aliases: ["girton"] },
 ];
 
 // ── building-name matching ─────────────────────────────────────────────────────

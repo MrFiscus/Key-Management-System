@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import {
-
   ChevronDown, ChevronRight, ChevronsUpDown, ChevronUp, CornerDownLeft,
-  Pencil, Plus, Trash2, X,
+  Pencil, Plus, Trash2, X, User, Briefcase, Building2, KeyRound, Tags, Settings2,
 } from "lucide-react";
 import { initialsOf, type KeyRecord, type Person } from "../../lib/types";
 import { DSU, formatDate, headerFill, headerFillActive, radius, shadow } from "../theme";
 import {
-  Avatar, Button, EmptyState, SectionHeader, SelectInput, Stamp, TextInput,
+  Avatar, Button, EmptyState, KeyChip, SectionHeader, SelectInput, Stamp, TextInput,
 } from "../components/primitives";
 import type { RowActions } from "./KeyTable";
 
@@ -202,21 +201,27 @@ export function DirectoryView({
               <thead>
                 <tr>
                   <th style={{ background: headerFill, width: 32 }} aria-label="Expand" />
-                  <Th label="Person" col="name" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} />
-                  <Th label="Department" col="department" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} />
-                  <Th label="Building" col="building" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} />
-                  <Th label="Keys" col="keys" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} align="center" />
+                  <Th label="Person" col="name" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} icon={<User size={12} />} />
+                  <Th label="Department" col="department" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} icon={<Briefcase size={12} />} />
+                  <Th label="Building" col="building" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} icon={<Building2 size={12} />} />
+                  <Th label="Keys" col="keys" sortCol={sortCol} sortDir={sortDir} onSort={sortBy} align="center" icon={<KeyRound size={12} />} />
                   <th
                     className="px-3 py-2 text-[12px] font-semibold text-left"
                     style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}
                   >
-                    Holding
+                    <span className="inline-flex items-center gap-1.5" style={{ color: DSU.trojan }}>
+                      <Tags size={12} />
+                      <span style={{ color: "rgba(255,255,255,0.88)" }}>Holding</span>
+                    </span>
                   </th>
                   <th
                     className="px-3 py-2 text-[12px] font-semibold text-right"
                     style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}
                   >
-                    Actions
+                    <span className="inline-flex items-center justify-end gap-1.5" style={{ color: DSU.trojan }}>
+                      <Settings2 size={12} />
+                      <span style={{ color: "rgba(255,255,255,0.88)" }}>Actions</span>
+                    </span>
                   </th>
                 </tr>
               </thead>
@@ -254,10 +259,10 @@ export function DirectoryView({
 // ── header cell ───────────────────────────────────────────────────────────────
 
 function Th({
-  label, col, sortCol, sortDir, onSort, align = "left",
+  label, col, sortCol, sortDir, onSort, align = "left", icon,
 }: {
   label: string; col: SortCol; sortCol: SortCol; sortDir: SortDir;
-  onSort: (c: SortCol) => void; align?: "left" | "center";
+  onSort: (c: SortCol) => void; align?: "left" | "center"; icon?: React.ReactNode;
 }) {
   const active = col === sortCol;
   return (
@@ -271,15 +276,18 @@ function Th({
         textAlign: align,
       }}
     >
-      <span className="inline-flex items-center gap-0.5">
-        {label}
-        {active ? (
-          sortDir === "asc"
-            ? <ChevronUp size={11} style={{ color: DSU.trojan }} />
-            : <ChevronDown size={11} style={{ color: DSU.trojan }} />
-        ) : (
-          <ChevronsUpDown size={11} style={{ opacity: 0.4 }} />
-        )}
+      <span className="inline-flex items-center gap-1.5">
+        {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
+        <span className="inline-flex items-center gap-0.5">
+          {label}
+          {active ? (
+            sortDir === "asc"
+              ? <ChevronUp size={11} style={{ color: DSU.trojan }} />
+              : <ChevronDown size={11} style={{ color: DSU.trojan }} />
+          ) : (
+            <ChevronsUpDown size={11} style={{ opacity: 0.4 }} />
+          )}
+        </span>
       </span>
     </th>
   );
@@ -450,7 +458,7 @@ function PersonRows({
                       style={{ borderTop: i === 0 ? "none" : "1px solid #eef2f5" }}
                     >
                       <td className="px-2 py-1 whitespace-nowrap">
-                        <Stamp stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} />
+                        <KeyChip stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} size={11} />
                         {r.numKeys > 1 && (
                           <span
                             className="ml-1.5 text-[10px] font-semibold px-1 py-px rounded-sm"

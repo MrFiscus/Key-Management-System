@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Pencil, Plus, Trash2, X, Users } from "lucide-react";
+import {
+  Pencil, Plus, Trash2, X, Users, KeyRound, Hash, StickyNote, Building2, Briefcase, Settings2,
+} from "lucide-react";
 import type { KeyDef, KeyRecord } from "../../lib/types";
 import { DSU, headerFill, radius, shadow } from "../theme";
 import { Button, EmptyState, SectionHeader, SelectInput, Stamp, TextInput } from "../components/primitives";
@@ -96,19 +98,35 @@ export function KeysView({
           <table className="w-full border-collapse text-[13px]" style={{ color: DSU.darkGray }}>
             <thead>
               <tr>
-                {["Key Stamp", "Room No.", "Room Description", "Building", "Department", "Notes"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-[12px] font-semibold text-left whitespace-nowrap"
+                {[
+                  { label: "Key Stamp", icon: <KeyRound size={12} /> },
+                  { label: "Room No.", icon: <Hash size={12} /> },
+                  { label: "Room Description", icon: <StickyNote size={12} /> },
+                  { label: "Building", icon: <Building2 size={12} /> },
+                  { label: "Department", icon: <Briefcase size={12} /> },
+                  { label: "Notes", icon: <StickyNote size={12} /> },
+                ].map(({ label, icon }) => (
+                  <th key={label} className="px-3 py-2 text-[12px] font-semibold text-left whitespace-nowrap"
                     style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}>
-                    {h}
+                    <span className="inline-flex items-center gap-1.5" style={{ color: DSU.trojan }}>
+                      {icon}
+                      <span style={{ color: "rgba(255,255,255,0.88)" }}>{label}</span>
+                    </span>
                   </th>
                 ))}
                 <th className="px-3 py-2 text-[12px] font-semibold text-center whitespace-nowrap"
                   style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}>
-                  Held By
+                  <span className="inline-flex items-center gap-1.5" style={{ color: DSU.trojan }}>
+                    <Users size={12} />
+                    <span style={{ color: "rgba(255,255,255,0.88)" }}>Held By</span>
+                  </span>
                 </th>
                 <th className="px-3 py-2 text-[12px] font-semibold text-right"
                   style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}>
-                  Actions
+                  <span className="inline-flex items-center justify-end gap-1.5" style={{ color: DSU.trojan }}>
+                    <Settings2 size={12} />
+                    <span style={{ color: "rgba(255,255,255,0.88)" }}>Actions</span>
+                  </span>
                 </th>
               </tr>
             </thead>

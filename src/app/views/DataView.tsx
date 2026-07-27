@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
-import { Download, Upload, AlertTriangle, Database, HardDrive, FileSpreadsheet, CheckCircle2 } from "lucide-react";
+import {
+  Download, Upload, AlertTriangle, Database, HardDrive, FileSpreadsheet, CheckCircle2,
+  MapPin, Pencil,
+} from "lucide-react";
 import type { DataStore, Snapshot } from "../../lib/types";
 import { buildWorkbook, downloadWorkbook, parseWorkbook, type ImportReport } from "../../lib/excel";
 import { DSU, font, radius, shadow } from "../theme";
@@ -12,12 +15,15 @@ import { Button, ErrorNote, HexWatermark, Modal, SectionHeader } from "../compon
  * that's what should shape whether someone bothers to back up today.
  */
 export function DataView({
-  store, snapshot, onImported, onToast,
+  store, snapshot, onImported, onToast, mapEditing, onToggleMapEditing,
 }: {
   store: DataStore;
   snapshot: Snapshot;
   onImported: () => Promise<void>;
   onToast: (msg: string) => void;
+  /** Whether the Map page's drag/resize position editor is unlocked. */
+  mapEditing: boolean;
+  onToggleMapEditing: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<{ snapshot: Snapshot; report: ImportReport; name: string } | null>(null);
@@ -207,6 +213,34 @@ export function DataView({
           <div className="text-[11px] flex items-center gap-1" style={{ color: "#9a7d1f" }}>
             <AlertTriangle size={11} /> Replaces all current records. Export a backup first.
           </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <SectionHeader title="Admin Tools" />
+        <div
+          className="bg-white border rounded p-4 flex items-center gap-4 flex-wrap"
+          style={{ borderColor: DSU.lightBorder, boxShadow: shadow.sm, borderRadius: radius.lg }}
+        >
+          <div
+            className="inline-flex items-center justify-center rounded-full shrink-0"
+            style={{ width: 34, height: 34, background: DSU.tintBg, color: DSU.trojan }}
+          >
+            <MapPin size={16} />
+          </div>
+          <div className="flex-1 min-w-[220px]">
+            <h3 className="text-[13px] font-semibold" style={{ color: DSU.navy }}>Campus Map Positions</h3>
+            <p className="text-[12px] leading-relaxed mt-0.5" style={{ color: DSU.darkGray }}>
+              Unlocks drag-and-resize editing for every building marker on the Map page.
+              Turn this on, fix any building's position there, then come back and switch it off.
+            </p>
+          </div>
+          <Button
+            variant={mapEditing ? "primary" : "secondary"}
+            onClick={onToggleMapEditing}
+          >
+            <Pencil size={12} /> {mapEditing ? "Editing On — Turn Off" : "Enable Map Editing"}
+          </Button>
         </div>
       </div>
 

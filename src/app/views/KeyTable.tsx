@@ -1,4 +1,8 @@
-import { ChevronUp, ChevronDown, ChevronsUpDown, Pencil, Trash2, CornerDownLeft } from "lucide-react";
+import {
+  ChevronUp, ChevronDown, ChevronsUpDown, Pencil, Trash2, CornerDownLeft,
+  User, StickyNote, Hash, KeyRound, Building2, Briefcase, CalendarClock, CalendarCheck2,
+  Layers, Activity, Settings2,
+} from "lucide-react";
 import type { KeyRecord } from "../../lib/types";
 import { DSU, formatDate, headerFill, headerFillActive, radius, shadow } from "../theme";
 import { EmptyState, Pill, Stamp } from "../components/primitives";
@@ -26,10 +30,10 @@ export function sortRecords(records: KeyRecord[], col: SortCol, dir: SortDir): K
 }
 
 function Th({
-  label, col, sortCol, sortDir, onSort, align = "left",
+  label, col, sortCol, sortDir, onSort, align = "left", icon,
 }: {
   label: string; col: SortCol; sortCol: SortCol; sortDir: SortDir;
-  onSort: (c: SortCol) => void; align?: "left" | "right" | "center";
+  onSort: (c: SortCol) => void; align?: "left" | "right" | "center"; icon?: React.ReactNode;
 }) {
   const active = col === sortCol;
   return (
@@ -43,15 +47,18 @@ function Th({
         textAlign: align,
       }}
     >
-      <span className="inline-flex items-center gap-0.5">
-        {label}
-        {active ? (
-          sortDir === "asc"
-            ? <ChevronUp size={11} style={{ color: DSU.trojan }} />
-            : <ChevronDown size={11} style={{ color: DSU.trojan }} />
-        ) : (
-          <ChevronsUpDown size={11} style={{ opacity: 0.4 }} />
-        )}
+      <span className="inline-flex items-center gap-1.5">
+        {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
+        <span className="inline-flex items-center gap-0.5">
+          {label}
+          {active ? (
+            sortDir === "asc"
+              ? <ChevronUp size={11} style={{ color: DSU.trojan }} />
+              : <ChevronDown size={11} style={{ color: DSU.trojan }} />
+          ) : (
+            <ChevronsUpDown size={11} style={{ opacity: 0.4 }} />
+          )}
+        </span>
       </span>
     </th>
   );
@@ -87,21 +94,27 @@ export function KeyTable({
       <table className="w-full border-collapse text-[13px]" style={{ color: DSU.darkGray }}>
         <thead>
           <tr>
-            {showPerson && <Th label="Person" col="personName" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
-            <Th label="Room Description" col="roomDescription" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Room No." col="roomNumber" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Key Stamp" col="keyStamp" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Building" col="building" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Department" col="department" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Date Issued" col="dateIssued" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="Date Returned" col="dateReturned" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-            <Th label="# Keys" col="numKeys" sortCol={sortCol} sortDir={sortDir} onSort={onSort} align="center" />
+            {showPerson && <Th label="Person" col="personName" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<User size={12} />} />}
+            <Th label="Room Description" col="roomDescription" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<StickyNote size={12} />} />
+            <Th label="Room No." col="roomNumber" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<Hash size={12} />} />
+            <Th label="Key Stamp" col="keyStamp" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<KeyRound size={12} />} />
+            <Th label="Building" col="building" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<Building2 size={12} />} />
+            <Th label="Department" col="department" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<Briefcase size={12} />} />
+            <Th label="Date Issued" col="dateIssued" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<CalendarClock size={12} />} />
+            <Th label="Date Returned" col="dateReturned" sortCol={sortCol} sortDir={sortDir} onSort={onSort} icon={<CalendarCheck2 size={12} />} />
+            <Th label="# Keys" col="numKeys" sortCol={sortCol} sortDir={sortDir} onSort={onSort} align="center" icon={<Layers size={12} />} />
             <th className="px-3 py-2 text-[12px] font-semibold text-left" style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}>
-              Status
+              <span className="inline-flex items-center gap-1.5" style={{ color: DSU.trojan }}>
+                <Activity size={12} />
+                <span style={{ color: "rgba(255,255,255,0.88)" }}>Status</span>
+              </span>
             </th>
             {actions && (
               <th className="px-3 py-2 text-[12px] font-semibold text-right" style={{ background: headerFill, color: "rgba(255,255,255,0.88)" }}>
-                Actions
+                <span className="inline-flex items-center justify-end gap-1.5" style={{ color: DSU.trojan }}>
+                  <Settings2 size={12} />
+                  <span style={{ color: "rgba(255,255,255,0.88)" }}>Actions</span>
+                </span>
               </th>
             )}
           </tr>

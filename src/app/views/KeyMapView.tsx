@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, MapPin, Plus, Minus, Maximize, KeyRound, Building2, Users } from "lucide-react";
-import type { KeyRecord } from "../../lib/types";
+import {
+  Search, X, MapPin, Plus, Minus, Maximize, KeyRound, Building2, Users,
+  Pencil, Copy, RotateCcw, Check,
+} from "lucide-react";
+import type { KeyRecord, DataStore, MapBoxRect } from "../../lib/types";
 import { DSU, font, shadow } from "../theme";
 import { Avatar, Button, Modal, Stamp } from "../components/primitives";
 import { BUILDING_LAYOUT, MAP_ASPECT, matchBuildingId, type BuildingBox } from "../map/buildingLayout";
+import { useDragBox } from "../map/useDragBox";
 
-// Static campus map image, dropped into /public. The DSU parking map is the one
-// to use — BUILDING_LAYOUT's %-coordinates were extracted from it, so the marker
-// overlay lines up. If it's ever off, nudge CAL below (global offset/scale, %).
-const MAP_IMG = "/campus-map.png?v=3hq";
-// Calibration to map BUILDING_LAYOUT's %-coords (from the full parking map) onto
-// the clean map, which cropped ~11% off the top. left = x*sx+ox; top = y*sy+oy.
-const CAL = { ox: -1.2, oy: -10.5, sx: 1, sy: 1.14 };
+// Static campus map image, dropped into /public. BUILDING_LAYOUT's %-coordinates
+// are calibrated directly against this image, so the marker overlay lines up
+// with no further transform needed.
+const MAP_IMG = "/campus-map.png?v=4hq";
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 6;
@@ -25,11 +26,16 @@ const DEFAULT_VIEW = { x0: 0, y0: 0.38, x1: 1, y1: 1 };
  * active records; clicking a building opens its key drawer.
  */
 export function KeyMapView({
-  records, onSelectKey, onSelectPerson,
+  records, onSelectKey, onSelectPerson, store, editing = false,
 }: {
   records: KeyRecord[]; // active checkouts
   onSelectKey: (id: string) => void;
   onSelectPerson: (id: string) => void;
+  /** Optional — enables the drag/resize position tool with persistence. */
+  store?: DataStore | null;
+  /** Controlled from the Data page's "Enable Map Editing" toggle (an admin
+   *  control, not something this page decides for itself). */
+  editing?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -39,6 +45,59 @@ export function KeyMapView({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [imgAspect, setImgAspect] = useState(MAP_ASPECT);
   const [imgOk, setImgOk] = useState(true);
+
+  // ── manual position/size editing ── whether it's unlocked is controlled by
+  // the `editing` prop (toggled from the Data page); positions are loaded from
+  // the store once, then kept in local state — every drag/resize end both
+  // updates this state and persists immediately, so a refresh never loses work.
+  const [overrides, setOverrides] = useState<Record<string, MapBoxRect>>({});
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!store) return;
+    store.loadMapLayout().then((layout) => {
+      if (!cancelled) setOverrides(layout.overrides);
+    });
+    return () => { cancelled = true; };
+  }, [store]);
+
+  const layout = useMemo(
+    () => BUILDING_LAYOUT.map((b) => ({ ...b, ...(overrides[b.id] ?? {}) })),
+    [overrides],
+  );
+
+  const persist = useCallback((next: Record<string, MapBoxRect>) => {
+    setOverrides(next);
+    store?.saveMapLayout({ overrides: next, locked: false });
+  }, [store]);
+
+  const updateBox = useCallback((id: string, rect: MapBoxRect) => {
+    setOverrides((prev) => ({ ...prev, [id]: rect }));
+  }, []);
+
+  const commitBox = useCallback((id: string, rect: MapBoxRect) => {
+    persist({ ...overrides, [id]: rect });
+  }, [overrides, persist]);
+
+  const resetLayout = useCallback(() => {
+    if (!confirm("Reset every building back to its default position?")) return;
+    persist({});
+  }, [persist]);
+
+  const copyLayout = useCallback(async () => {
+    const lines = BUILDING_LAYOUT.map((b) => {
+      const r = overrides[b.id];
+      const x = (r?.x ?? b.x).toFixed(1), y = (r?.y ?? b.y).toFixed(1);
+      const w = (r?.width ?? b.width).toFixed(1), h = (r?.height ?? b.height).toFixed(1);
+      return `  ${b.id}: { x: ${x}, y: ${y}, width: ${w}, height: ${h} },`;
+    });
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [overrides]);
+
+  const stageRef = useRef<HTMLDivElement>(null);
+  const getStageRect = useCallback(() => stageRef.current?.getBoundingClientRect() ?? null, []);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
@@ -215,6 +274,17 @@ export function KeyMapView({
           )}
         </div>
 
+        {editing && (
+          <>
+            <Button onClick={copyLayout} title="Copy every building's current position as code">
+              {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy Layout"}
+            </Button>
+            <Button onClick={resetLayout} title="Reset all buildings to their default position">
+              <RotateCcw size={13} /> Reset
+            </Button>
+          </>
+        )}
+
         <div className="flex items-center gap-1 ml-auto">
           <Button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="!px-2"><Minus size={14} /></Button>
           <span className="text-[12px] tabular w-11 text-center" style={{ color: DSU.midGray }}>{Math.round(zoom * 100)}%</span>
@@ -222,6 +292,18 @@ export function KeyMapView({
         </div>
         <Button onClick={() => centerAt(1)} title="Fit the whole map"><Maximize size={13} /> Fit</Button>
       </div>
+
+      {editing && (
+        <div
+          className="mb-3 px-3 py-2 rounded-md text-[12px] flex items-center gap-2"
+          style={{ background: DSU.tintBg, color: DSU.tintText, border: `1px solid ${DSU.tintBorder}` }}
+        >
+          <Pencil size={13} className="shrink-0" />
+          Map editing is unlocked from the Data page. Drag any building box to move it, or drag its
+          bottom-right corner to resize — changes save automatically.
+        </div>
+      )}
+
 
       {/* ── Left panel + Map + right list ── */}
       <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
@@ -281,9 +363,10 @@ export function KeyMapView({
           onPointerDown={onCanvasPointerDown}
           onWheel={onWheel}
           className="relative flex-1 min-w-0 overflow-hidden rounded-lg select-none border"
-          style={{ background: "#e0e8d0", borderColor: DSU.lightBorder, cursor: "grab", touchAction: "none" }}
+          style={{ background: "#768b48", borderColor: DSU.lightBorder, cursor: "grab", touchAction: "none" }}
         >
           <div
+            ref={stageRef}
             className="absolute top-0 left-0"
             style={{
               width: stageBase.w || 1,
@@ -307,7 +390,7 @@ export function KeyMapView({
               style={{ pointerEvents: "none" }}
             />
 
-            {imgOk && BUILDING_LAYOUT.map((box) => (
+            {imgOk && layout.map((box) => (
               <BuildingMarker
                 key={box.id}
                 box={box}
@@ -315,6 +398,22 @@ export function KeyMapView({
                 dimmed={matchIds !== null && !matchIds.has(box.id)}
                 highlighted={(matchIds !== null && matchIds.has(box.id)) || spotlightId === box.id}
                 onOpen={() => setSelectedId(box.id)}
+                editing={editing}
+                getStageRect={getStageRect}
+                onMove={(r) => updateBox(box.id, r)}
+                onEnd={(r) => commitBox(box.id, r)}
+              />
+            ))}
+
+            {/* Resize handles render in their own pass, after every marker, so a
+                handle is never covered by a neighboring building's larger box. */}
+            {imgOk && editing && layout.map((box) => (
+              <ResizeHandle
+                key={`${box.id}-resize`}
+                box={box}
+                getStageRect={getStageRect}
+                onMove={(r) => updateBox(box.id, r)}
+                onEnd={(r) => commitBox(box.id, r)}
               />
             ))}
           </div>
@@ -418,45 +517,56 @@ export function KeyMapView({
 // ── a clickable building marker over the map image ───────────────────────────────
 
 function BuildingMarker({
-  box, count, dimmed, highlighted, onOpen,
+  box, count, dimmed, highlighted, onOpen, editing, getStageRect, onMove, onEnd,
 }: {
   box: BuildingBox;
   count: number;
   dimmed: boolean;
   highlighted: boolean;
   onOpen: () => void;
+  editing: boolean;
+  getStageRect: () => DOMRect | null;
+  onMove: (rect: MapBoxRect) => void;
+  onEnd: (rect: MapBoxRect) => void;
 }) {
   const [hover, setHover] = useState(false);
   const hasKeys = count > 0;
   // Invisible by default — the map image already shows the buildings. The
   // outline/tint appears only on hover (or when highlighted via search / the
   // side panel). Buildings with keys still carry a persistent count badge.
-  const active = hover || highlighted;
+  // While editing, the box always shows so it can be found and grabbed.
+  const active = hover || highlighted || editing;
 
-  const left = box.x * CAL.sx + CAL.ox;
-  const top = box.y * CAL.sy + CAL.oy;
-  const width = box.width * CAL.sx;
-  const height = box.height * CAL.sy;
+  const rect: MapBoxRect = { x: box.x, y: box.y, width: box.width, height: box.height };
+
+  const drag = useDragBox({
+    disabled: !editing,
+    rect,
+    getStageRect,
+    onMove,
+    onEnd,
+  });
 
   return (
     <button
-      onClick={onOpen}
+      onPointerDown={drag.onPointerDown}
+      onClick={() => { if (!editing) onOpen(); }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title={`${box.name} — ${count} key${count === 1 ? "" : "s"}`}
       className="absolute transition-colors"
       style={{
-        left: `${left}%`,
-        top: `${top}%`,
-        width: `${width}%`,
-        height: `${height}%`,
+        left: `${box.x}%`,
+        top: `${box.y}%`,
+        width: `${box.width}%`,
+        height: `${box.height}%`,
         minWidth: 10,
         minHeight: 10,
         borderRadius: 3,
-        background: highlighted ? "rgba(224,180,0,0.32)" : hover ? "rgba(0,169,224,0.22)" : "transparent",
+        background: highlighted ? "rgba(224,180,0,0.32)" : hover ? "rgba(0,169,224,0.22)" : editing ? "rgba(0,169,224,0.10)" : "transparent",
         outline: active ? `2px solid ${highlighted ? "#e0b400" : DSU.trojan}` : "none",
         opacity: dimmed ? 0.4 : 1,
-        cursor: "pointer",
+        cursor: editing ? "move" : "pointer",
       }}
     >
       {hasKeys && (
@@ -473,6 +583,80 @@ function BuildingMarker({
         </span>
       )}
     </button>
+  );
+}
+
+// ── resize handle ── rendered as its own top-level layer, one pass after every
+// marker, so its hit target is never covered by a neighboring building's box
+// (a real bug when boxes sit close together, which is most of this campus).
+function ResizeHandle({
+  box, getStageRect, onMove, onEnd,
+}: {
+  box: BuildingBox;
+  getStageRect: () => DOMRect | null;
+  onMove: (rect: MapBoxRect) => void;
+  onEnd: (rect: MapBoxRect) => void;
+}) {
+  const start = useRef<{ rect: MapBoxRect; x: number; y: number } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = getStageRect();
+    if (!stage) return;
+    const rect: MapBoxRect = { x: box.x, y: box.y, width: box.width, height: box.height };
+    start.current = { rect, x: e.clientX, y: e.clientY };
+
+    const move = (ev: PointerEvent) => {
+      const s = start.current;
+      if (!s) return;
+      const dwPct = ((ev.clientX - s.x) / stage.width) * 100;
+      const dhPct = ((ev.clientY - s.y) / stage.height) * 100;
+      onMove({
+        ...s.rect,
+        width: clamp(s.rect.width + dwPct, 2, 100 - s.rect.x),
+        height: clamp(s.rect.height + dhPct, 2, 100 - s.rect.y),
+      });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const s = start.current;
+      start.current = null;
+      if (!s) return;
+      const dwPct = ((ev.clientX - s.x) / stage.width) * 100;
+      const dhPct = ((ev.clientY - s.y) / stage.height) * 100;
+      onEnd({
+        ...s.rect,
+        width: clamp(s.rect.width + dwPct, 2, 100 - s.rect.x),
+        height: clamp(s.rect.height + dhPct, 2, 100 - s.rect.y),
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      title={`Resize ${box.name}`}
+      className="absolute flex items-center justify-center"
+      style={{
+        left: `${box.x + box.width}%`,
+        top: `${box.y + box.height}%`,
+        width: 26,
+        height: 26,
+        transform: "translate(-50%, -50%)",
+        cursor: "nwse-resize",
+        touchAction: "none",
+      }}
+    >
+      <span
+        className="rounded-sm pointer-events-none"
+        style={{ width: 12, height: 12, background: DSU.trojan, border: "2px solid #fff", boxShadow: shadow.sm }}
+      />
+    </div>
   );
 }
 

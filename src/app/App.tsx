@@ -74,6 +74,9 @@ export default function App() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [toast, setToast] = useState("");
+  // Admin-only toggle, set from the Data page, that unlocks the Map page's
+  // drag/resize position editor — not something the Map page decides alone.
+  const [mapEditing, setMapEditing] = useState(false);
   /**
    * Detail-page navigation stack. Person and key pages link to each other, so a
    * stack lets Back retrace the actual path (person → key → person) instead of
@@ -707,6 +710,8 @@ export default function App() {
                 records={activeRecords}
                 onSelectKey={openKey}
                 onSelectPerson={openPerson}
+                store={store}
+                editing={mapEditing}
               />
             )}
 
@@ -716,6 +721,8 @@ export default function App() {
                 snapshot={snapshot}
                 onImported={refresh}
                 onToast={setToast}
+                mapEditing={mapEditing}
+                onToggleMapEditing={() => setMapEditing((v) => !v)}
               />
             )}
           </div>
