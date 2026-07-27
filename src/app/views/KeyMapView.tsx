@@ -4,7 +4,7 @@ import {
   Pencil, Copy, RotateCcw, Check,
 } from "lucide-react";
 import type { KeyRecord, DataStore, MapBoxRect } from "../../lib/types";
-import { DSU, font, shadow } from "../theme";
+import { DSU, font, radius, shadow } from "../theme";
 import { Avatar, Button, Modal, Stamp } from "../components/primitives";
 import { BUILDING_LAYOUT, MAP_ASPECT, matchBuildingId, type BuildingBox } from "../map/buildingLayout";
 import { useDragBox } from "../map/useDragBox";
@@ -14,11 +14,189 @@ import { useDragBox } from "../map/useDragBox";
 // with no further transform needed.
 const MAP_IMG = "/campus-map.png?v=4hq";
 
+// A real grass swatch, cropped from a clear corner of campus-map.png itself
+// (see the crop script in git history) and tiled — so the area beyond the
+// map's edge is the map's own texture continuing off-frame, an exact color
+// and grain match, not an approximation.
+const GRASS_BG: React.CSSProperties = {
+  backgroundColor: "#768b48",
+  backgroundImage: "url(/grass-tile.png)",
+  backgroundRepeat: "repeat",
+  backgroundSize: "260px 260px",
+};
+
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 6;
 // Default view frames the lower campus (the academic core, where the buildings
 // and keys are), as a fraction of the stage: full width, from ~38% down.
-const DEFAULT_VIEW = { x0: 0, y0: 0.38, x1: 1, y1: 1 };
+const DEFAULT_VIEW = { x0: 0.08, y0: 0.24, x1: 0.74, y1: 1 };
+
+/** Same white-card chrome as the Dashboard/PersonView/KeyView — no hairline
+ *  border, just a soft shadow and generous rounding. */
+const CARD: React.CSSProperties = {
+  background: "#ffffff",
+  borderRadius: 20,
+  boxShadow: shadow.sm,
+};
+
+/** Small circular icon badge, same spec used across the redesigned pages. */
+function IconBadge({ icon, bg, fg = "#fff" }: { icon: React.ReactNode; bg: string; fg?: string }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-full shrink-0"
+      style={{ width: 34, height: 34, background: bg, color: fg }}
+    >
+      {icon}
+    </span>
+  );
+}
+
+/** One stat tile — icon badge + label on top, big number below — same spec
+ *  as the Dashboard/PersonView/KeyView stat cards. */
+function StatTile({
+  icon, bg, label, value, solid = false,
+}: {
+  icon: React.ReactNode; bg: string; label: string; value: number; solid?: boolean;
+}) {
+  return (
+    <div className="p-4" style={solid ? { ...CARD, background: bg } : CARD}>
+      <div className="flex items-start justify-between mb-2.5">
+        <span className="text-[13px] font-medium" style={{ color: solid ? "rgba(255,255,255,0.75)" : DSU.midGray }}>{label}</span>
+        <IconBadge icon={icon} bg={solid ? "#ffffff" : bg} fg={solid ? bg : "#ffffff"} />
+      </div>
+      <div className="text-[24px] font-bold leading-none tabular" style={{ color: solid ? "#ffffff" : DSU.navy }}>
+        {value.toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+/** Panel chrome matching the Dashboard's — serif title, icon, rounded
+ *  shadow-card, no border. */
+function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col overflow-hidden" style={CARD}>
+      <div className="px-4 pt-4 pb-2 text-[16px] font-semibold flex items-center gap-2" style={{ color: DSU.navy, fontFamily: font.display }}>
+        {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Compact horizontal bar list ranking the top buildings by keys currently
+ *  out — a real chart mark (proportional bars), not just a number list. */
+/**
+ * Horizontal bar list ranking the top buildings by keys currently out — a
+ * building icon badge, name, a rounded progress track, and the count. Simple
+ * on purpose (this panel is small); the polish is in the badge color, the
+ * hover lift, and the count chip, not chart machinery.
+ */
+function TopBuildingsChart({ rows }: { rows: { b: BuildingBox; count: number }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (rows.length === 0) {
+    return <div className="px-5 pb-4 text-[12px]" style={{ color: DSU.midGray }}>No keys currently out.</div>;
+  }
+  const max = Math.max(1, ...rows.map((r) => r.count));
+
+  return (
+    <div className="px-4 pb-4 pt-1 flex flex-col gap-2.5">
+      {rows.map(({ b, count }, i) => {
+        const pct = Math.max(8, (count / max) * 100);
+        const isHover = hover === i;
+        return (
+          <div
+            key={b.id}
+            className="flex items-center gap-2.5 cursor-pointer"
+            tabIndex={0}
+            role="button"
+            title={b.name}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+            onFocus={() => setHover(i)}
+            onBlur={() => setHover(null)}
+          >
+            <span
+              className="inline-flex items-center justify-center rounded-full shrink-0 transition-transform"
+              style={{ width: 24, height: 24, background: i % 2 === 0 ? DSU.navy : DSU.trojan, color: "#fff", transform: isHover ? "scale(1.1)" : "scale(1)" }}
+            >
+              <Building2 size={11} />
+            </span>
+            <span className="text-[11.5px] truncate w-[74px] shrink-0" style={{ color: DSU.darkGray }}>{b.name}</span>
+            <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#eef1f3" }}>
+              <div
+                className="h-full rounded-full transition-[width,opacity] duration-300"
+                style={{ width: `${pct}%`, background: DSU.trojan, opacity: isHover ? 1 : 0.85 }}
+              />
+            </div>
+            <span className="text-[11.5px] font-semibold tabular w-4 text-right shrink-0" style={{ color: DSU.navy }}>{count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One row in the "Navigate" list — a cropped, zoomed-in slice of the actual
+ *  campus map centered on that building's footprint (so it reads as "this
+ *  building" rather than a generic icon) plus its name, stacked vertically
+ *  down the right column. Native-resolution crop (no upscale), cheap to
+ *  render many of since every row shares the one cached image. */
+function BuildingNavRow({
+  box, count, active, onClick, onMouseEnter, onMouseLeave,
+}: {
+  box: BuildingBox; count: number; active: boolean; onClick: () => void;
+  onMouseEnter: () => void; onMouseLeave: () => void;
+}) {
+  const W = 56, H = 56;
+  const IMG_W = 896, IMG_H = 1183; // native px of public/campus-map.png
+  const cx = ((box.x + box.width / 2) / 100) * IMG_W;
+  const cy = ((box.y + box.height / 2) / 100) * IMG_H;
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className="flex items-center gap-2.5 w-full text-left p-2 rounded-xl transition-colors shrink-0"
+      style={{ background: active ? "#eaf6fc" : "#f7f9fa" }}
+      title={box.name}
+    >
+      <div className="relative overflow-hidden rounded-lg shrink-0" style={{ width: W, height: H }}>
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${MAP_IMG})`,
+            backgroundSize: `${IMG_W}px ${IMG_H}px`,
+            backgroundPosition: `${-(cx - W / 2)}px ${-(cy - H / 2)}px`,
+            backgroundRepeat: "no-repeat",
+          }}
+        />
+        <div
+          className="absolute inset-0 rounded-lg"
+          style={{ outline: active ? `2.5px solid ${DSU.trojan}` : "1.5px solid rgba(255,255,255,0.7)", outlineOffset: -1.5 }}
+        />
+      </div>
+      <span className="text-[13px] font-medium leading-tight flex-1 min-w-0 truncate" style={{ color: DSU.darkGray }}>
+        {box.name}
+      </span>
+      {/* Always shown, even at 0 — a big, clear square badge, not a pill the
+          number gets squeezed into. */}
+      <span
+        className="inline-flex items-center justify-center rounded-lg tabular font-bold shrink-0"
+        style={{
+          minWidth: 38, height: 34, fontSize: 16, padding: "0 8px",
+          background: count > 0 ? DSU.trojan : "#eef1f3",
+          color: count > 0 ? "#fff" : DSU.midGray,
+          boxShadow: count > 0 ? shadow.sm : "none",
+        }}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
 
 /**
  * Campus key map: a static Google/parking map image with clickable building
@@ -64,6 +242,11 @@ export function KeyMapView({
   const layout = useMemo(
     () => BUILDING_LAYOUT.map((b) => ({ ...b, ...(overrides[b.id] ?? {}) })),
     [overrides],
+  );
+
+  const navigateList = useMemo(
+    () => [...layout].sort((a, b) => a.name.localeCompare(b.name)),
+    [layout],
   );
 
   const persist = useCallback((next: Record<string, MapBoxRect>) => {
@@ -214,156 +397,118 @@ export function KeyMapView({
   const selectedKeys = selectedId ? keysByBuilding.get(selectedId) ?? [] : [];
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 118px)" }}>
-      {/* ── Toolbar ── */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div
-          className="relative flex-1 min-w-[200px] max-w-[360px]"
-          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSearchFocused(false); }}
-        >
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: DSU.midGray }} />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            placeholder="Search a building or key…"
-            aria-label="Search buildings or keys"
-            autoComplete="off"
-            className="w-full pl-8 pr-8 py-1.5 text-[13px] rounded-md border outline-none transition-all focus:shadow-[0_0_0_3px_rgba(0,169,224,0.20)]"
-            style={{ borderColor: DSU.lightBorder, color: DSU.darkGray, background: "#fff" }}
-          />
-          {search && (
-            <button onClick={() => setSearch("")} aria-label="Clear" className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: DSU.midGray }}>
-              <X size={13} />
-            </button>
-          )}
-          {searchFocused && search.trim() && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md overflow-y-auto z-40" style={{ borderColor: DSU.lightBorder, boxShadow: shadow.lg, maxHeight: 320 }}>
-              {suggestions.buildings.length === 0 && suggestions.keys.length === 0 && (
-                <div className="px-3 py-2.5 text-[12px]" style={{ color: DSU.midGray }}>No matches.</div>
-              )}
-              {suggestions.buildings.length > 0 && (
-                <div>
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>Buildings</div>
-                  {suggestions.buildings.map((b) => (
-                    <button key={b.id} type="button" onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setSelectedId(b.id); setSearchFocused(false); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b" style={{ borderColor: "#eef1f3" }}>
-                      <MapPin size={13} style={{ color: DSU.trojan, flexShrink: 0 }} />
-                      <span className="font-medium truncate" style={{ color: DSU.navy }}>{b.name}</span>
-                      <span className="ml-auto text-[12px] tabular whitespace-nowrap" style={{ color: DSU.midGray }}>{(keysByBuilding.get(b.id) ?? []).length} keys</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {suggestions.keys.length > 0 && (
-                <div>
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>Keys</div>
-                  {suggestions.keys.map((r) => (
-                    <button key={r.assignmentId} type="button" onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { onSelectKey(r.keyId); setSearchFocused(false); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b last:border-0" style={{ borderColor: "#eef1f3" }}>
-                      <Stamp stamp={r.keyStamp} />
-                      <span className="truncate" style={{ color: DSU.darkGray }}>{r.personName}</span>
-                      {(r.roomDescription || r.roomNumber) && <span className="ml-auto text-[12px] truncate" style={{ color: DSU.midGray }}>{r.roomDescription || r.roomNumber}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {editing && (
-          <>
-            <Button onClick={copyLayout} title="Copy every building's current position as code">
-              {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy Layout"}
-            </Button>
-            <Button onClick={resetLayout} title="Reset all buildings to their default position">
-              <RotateCcw size={13} /> Reset
-            </Button>
-          </>
-        )}
-
-        <div className="flex items-center gap-1 ml-auto">
-          <Button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="!px-2"><Minus size={14} /></Button>
-          <span className="text-[12px] tabular w-11 text-center" style={{ color: DSU.midGray }}>{Math.round(zoom * 100)}%</span>
-          <Button onClick={() => zoomBy(1.2)} aria-label="Zoom in" className="!px-2"><Plus size={14} /></Button>
-        </div>
-        <Button onClick={() => centerAt(1)} title="Fit the whole map"><Maximize size={13} /> Fit</Button>
+    <div className="flex gap-4" style={{ height: "calc(100vh - 118px)" }}>
+      {/* ── Left column: stat tiles stacked, chart underneath ── */}
+      <div className="w-[360px] shrink-0 flex flex-col gap-4 overflow-y-auto">
+        <StatTile icon={<KeyRound size={15} />} bg={DSU.navy} label="Keys out" value={totalMatched} />
+        <StatTile icon={<Building2 size={15} />} bg={DSU.navy} label="Buildings with keys" value={ranked.length} solid />
+        <StatTile icon={<Users size={15} />} bg={DSU.navy} label="Key holders" value={holders} />
+        <Panel title="Most Keys Out" icon={<KeyRound size={13} />}>
+          <TopBuildingsChart rows={ranked} />
+        </Panel>
       </div>
 
-      {editing && (
-        <div
-          className="mb-3 px-3 py-2 rounded-md text-[12px] flex items-center gap-2"
-          style={{ background: DSU.tintBg, color: DSU.tintText, border: `1px solid ${DSU.tintBorder}` }}
-        >
-          <Pencil size={13} className="shrink-0" />
-          Map editing is unlocked from the Data page. Drag any building box to move it, or drag its
-          bottom-right corner to resize — changes save automatically.
-        </div>
-      )}
+      {/* ── Middle column: search bar (centered, Dashboard-style), then the map ── */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+        <div className="relative shrink-0" style={{ minHeight: 46 }}>
+          <div
+            className="relative w-full max-w-[440px] mx-auto"
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSearchFocused(false); }}
+          >
+            <Search
+              size={17}
+              className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: DSU.midGray }}
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              placeholder="Search a building or key…"
+              aria-label="Search buildings or keys"
+              autoComplete="off"
+              className="w-full pl-11 pr-4 py-3 text-[14px] bg-white outline-none transition-all duration-150"
+              style={{
+                border: `1px solid ${searchFocused ? DSU.trojan : "#dfe3e7"}`,
+                borderBottom: searchFocused && search.trim() ? "none" : `1px solid ${searchFocused ? DSU.trojan : "#dfe3e7"}`,
+                borderRadius: searchFocused && search.trim() ? `${radius.xl}px ${radius.xl}px 0 0` : radius.xl,
+                boxShadow: searchFocused && search.trim()
+                  ? "none"
+                  : searchFocused
+                    ? "0 4px 16px -4px rgba(16,40,56,0.14)"
+                    : shadow.sm,
+                color: DSU.darkGray,
+              }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} aria-label="Clear" className="absolute right-4 top-1/2 -translate-y-1/2" style={{ color: DSU.midGray }}>
+                <X size={14} />
+              </button>
+            )}
 
-
-      {/* ── Left panel + Map + right list ── */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
-        {/* Overview + legend */}
-        <aside
-          className="shrink-0 lg:w-[236px] flex flex-col rounded-lg border overflow-hidden"
-          style={{ borderColor: DSU.lightBorder, background: "#fff", boxShadow: shadow.sm }}
-        >
-          <div className="px-3 py-2 border-b" style={{ borderColor: DSU.lightBorder }}>
-            <span className="text-[14px] font-semibold" style={{ color: DSU.navy, fontFamily: font.display }}>Overview</span>
-          </div>
-
-          {/* stats, grouped and vertically centered */}
-          <div className="flex-1 flex flex-col justify-center gap-1 px-4">
-            {[
-              { icon: <KeyRound size={17} />, n: totalMatched, label: "Keys out" },
-              { icon: <Building2 size={17} />, n: ranked.length, label: "Buildings with keys" },
-              { icon: <Users size={17} />, n: holders, label: "Key holders" },
-            ].map((s, i) => (
+            {searchFocused && search.trim() && (
               <div
-                key={s.label}
-                className="flex items-center gap-3 py-3"
-                style={{ borderTop: i === 0 ? "none" : "1px solid #eef1f3" }}
+                className="absolute left-0 right-0 top-full bg-white overflow-hidden z-40"
+                style={{
+                  border: `1px solid ${DSU.trojan}`,
+                  borderTop: "none",
+                  borderRadius: `0 0 ${radius.xl}px ${radius.xl}px`,
+                  boxShadow: "0 10px 28px -10px rgba(16,40,56,0.22)",
+                  maxHeight: 360,
+                  overflowY: "auto",
+                }}
               >
-                <span className="inline-flex items-center justify-center rounded-lg shrink-0"
-                  style={{ width: 34, height: 34, background: DSU.tintBg, color: DSU.trojan }}>
-                  {s.icon}
-                </span>
-                <div>
-                  <div className="text-[24px] font-bold leading-none tabular" style={{ color: DSU.navy }}>{s.n.toLocaleString()}</div>
-                  <div className="text-[11px] mt-1" style={{ color: DSU.midGray }}>{s.label}</div>
-                </div>
+                {suggestions.buildings.length === 0 && suggestions.keys.length === 0 && (
+                  <div className="px-4 py-2.5 text-[12px]" style={{ color: DSU.midGray }}>No matches.</div>
+                )}
+                {suggestions.buildings.length > 0 && (
+                  <div>
+                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>Buildings</div>
+                    {suggestions.buildings.map((b) => (
+                      <button key={b.id} type="button" onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setSelectedId(b.id); setSearchFocused(false); }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f4f8fb] transition-colors border-b" style={{ borderColor: "#eef1f3" }}>
+                        <MapPin size={13} style={{ color: DSU.trojan, flexShrink: 0 }} />
+                        <span className="font-medium truncate" style={{ color: DSU.navy }}>{b.name}</span>
+                        <span className="ml-auto text-[12px] tabular whitespace-nowrap" style={{ color: DSU.midGray }}>{(keysByBuilding.get(b.id) ?? []).length} keys</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {suggestions.keys.length > 0 && (
+                  <div>
+                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>Keys</div>
+                    {suggestions.keys.map((r) => (
+                      <button key={r.assignmentId} type="button" onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { onSelectKey(r.keyId); setSearchFocused(false); }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#f4f8fb] transition-colors border-b last:border-0" style={{ borderColor: "#eef1f3" }}>
+                        <Stamp stamp={r.keyStamp} />
+                        <span className="truncate" style={{ color: DSU.darkGray }}>{r.personName}</span>
+                        {(r.roomDescription || r.roomNumber) && <span className="ml-auto text-[12px] truncate" style={{ color: DSU.midGray }}>{r.roomDescription || r.roomNumber}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
+            )}
           </div>
 
-          {/* legend pinned to the bottom */}
-          <div className="border-t px-4 py-3" style={{ borderColor: DSU.lightBorder, background: "#fafbfa" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: DSU.midGray }}>Legend</div>
-            <div className="flex items-center gap-2 text-[12px] mb-2" style={{ color: DSU.darkGray }}>
-              <span className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
-                style={{ minWidth: 18, height: 18, fontSize: 10, padding: "0 4px", background: DSU.trojan, border: "1.5px solid #fff", boxShadow: shadow.sm }}>3</span>
-              Keys currently out here
-            </div>
-            <div className="flex items-center gap-2 text-[12px] mb-2" style={{ color: DSU.darkGray }}>
-              <span className="shrink-0 rounded-sm" style={{ width: 18, height: 14, background: "rgba(0,169,224,0.22)", outline: `2px solid ${DSU.trojan}` }} />
-              Hover to highlight a building
-            </div>
-            <div className="text-[12px]" style={{ color: DSU.midGray }}>
-              Click any building for its full key list.
-            </div>
+          {/* Zoom/fit pinned to the far right, independent of the search bar's
+              own centering — no card chrome, just the plain buttons. */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <Button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="!px-2"><Minus size={14} /></Button>
+            <span className="text-[12px] tabular w-11 text-center" style={{ color: DSU.midGray }}>{Math.round(zoom * 100)}%</span>
+            <Button onClick={() => zoomBy(1.2)} aria-label="Zoom in" className="!px-2"><Plus size={14} /></Button>
+            <Button onClick={() => centerAt(1)} title="Fit the whole map"><Maximize size={13} /> Fit</Button>
           </div>
-        </aside>
+        </div>
 
         <div
           ref={viewportRef}
           onPointerDown={onCanvasPointerDown}
           onWheel={onWheel}
-          className="relative flex-1 min-w-0 overflow-hidden rounded-lg select-none border"
-          style={{ background: "#768b48", borderColor: DSU.lightBorder, cursor: "grab", touchAction: "none" }}
+          className="relative flex-1 min-h-0 overflow-hidden select-none"
+          style={{ ...GRASS_BG, borderRadius: 20, boxShadow: shadow.sm, cursor: "grab", touchAction: "none" }}
         >
           <div
             ref={stageRef}
@@ -428,44 +573,54 @@ export function KeyMapView({
             </div>
           )}
 
-          <div className="absolute bottom-2 left-3 text-[11px] pointer-events-none" style={{ color: DSU.darkGray }}>
+          {editing && (
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1.5 rounded-xl" style={{ background: "rgba(255,255,255,0.92)", boxShadow: shadow.md }}>
+              <Pencil size={12} style={{ color: DSU.trojan }} />
+              <Button onClick={copyLayout} title="Copy every building's current position as code">
+                {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy Layout"}
+              </Button>
+              <Button onClick={resetLayout} title="Reset all buildings to their default position">
+                <RotateCcw size={13} /> Reset
+              </Button>
+            </div>
+          )}
+
+          <div className="absolute bottom-2 left-3 text-[11px] pointer-events-none" style={{ color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
             Click a building for its keys · drag to pan · scroll to zoom
           </div>
         </div>
-
-        {/* Keys-by-building side panel */}
-        <aside
-          className="shrink-0 lg:w-[272px] flex flex-col rounded-lg border overflow-hidden max-h-[260px] lg:max-h-none"
-          style={{ borderColor: DSU.lightBorder, background: "#fff", boxShadow: shadow.sm }}
-        >
-          <div className="px-3 py-2 border-b flex items-center gap-2" style={{ borderColor: DSU.lightBorder }}>
-            <span className="text-[14px] font-semibold" style={{ color: DSU.navy, fontFamily: font.display }}>Keys by Building</span>
-            <span className="ml-auto text-[12px] tabular" style={{ color: DSU.midGray }}>{totalMatched} out</span>
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {ranked.length === 0 ? (
-              <div className="px-3 py-4 text-[12px]" style={{ color: DSU.midGray }}>No keys currently out.</div>
-            ) : (
-              ranked.map(({ b, count }) => (
-                <button
-                  key={b.id}
-                  onClick={() => setSelectedId(b.id)}
-                  onMouseEnter={() => setSpotlightId(b.id)}
-                  onMouseLeave={() => setSpotlightId(null)}
-                  className="flex items-center gap-2 w-full text-left px-3 py-[7px] border-b transition-colors hover:bg-[#f4f8fb]"
-                  style={{ borderColor: "#eef1f3" }}
-                >
-                  <span className="text-[12.5px] truncate" style={{ color: DSU.darkGray }}>{b.name}</span>
-                  <span className="ml-auto inline-flex items-center justify-center rounded-full tabular font-bold text-white shrink-0"
-                    style={{ minWidth: 21, height: 18, fontSize: 11, padding: "0 6px", background: DSU.trojan }}>
-                    {count}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        </aside>
       </div>
+
+      {/* ── Right column: navigate — every building, thumbnail + name ── */}
+      <aside className="w-[460px] shrink-0 flex flex-col overflow-hidden" style={CARD}>
+        <div
+          className="px-4 pt-4 pb-2 text-[16px] font-semibold flex items-center gap-2"
+          style={{ color: DSU.navy, fontFamily: font.display }}
+        >
+          <span style={{ color: DSU.trojan }}><Building2 size={13} /></span>
+          Navigate
+          <span className="ml-auto tabular font-normal text-[12px]" style={{ color: DSU.midGray, fontFamily: font.sans }}>{layout.length}</span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 pt-1 flex flex-col gap-2">
+          {navigateList.map((box) => (
+            <BuildingNavRow
+              key={box.id}
+              box={box}
+              count={(keysByBuilding.get(box.id) ?? []).length}
+              active={selectedId === box.id}
+              onMouseEnter={() => setSpotlightId(box.id)}
+              onMouseLeave={() => setSpotlightId(null)}
+              onClick={() => {
+                focusRegion({
+                  x0: box.x / 100 - 0.03, y0: box.y / 100 - 0.03,
+                  x1: (box.x + box.width) / 100 + 0.03, y1: (box.y + box.height) / 100 + 0.03,
+                });
+                setSelectedId(box.id);
+              }}
+            />
+          ))}
+        </div>
+      </aside>
 
       {/* ── Building key list drawer ── */}
       {selected && (
@@ -554,7 +709,7 @@ function BuildingMarker({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title={`${box.name} — ${count} key${count === 1 ? "" : "s"}`}
-      className="absolute transition-colors"
+      className="absolute"
       style={{
         left: `${box.x}%`,
         top: `${box.y}%`,
@@ -562,11 +717,21 @@ function BuildingMarker({
         height: `${box.height}%`,
         minWidth: 10,
         minHeight: 10,
-        borderRadius: 3,
-        background: highlighted ? "rgba(224,180,0,0.32)" : hover ? "rgba(0,169,224,0.22)" : editing ? "rgba(0,169,224,0.10)" : "transparent",
-        outline: active ? `2px solid ${highlighted ? "#e0b400" : DSU.trojan}` : "none",
+        borderRadius: 10,
+        background: highlighted
+          ? "radial-gradient(ellipse at center, rgba(224,180,0,0.85) 0%, rgba(224,180,0,0.6) 50%, rgba(224,180,0,0.22) 80%, rgba(224,180,0,0) 100%)"
+          : hover
+          ? "radial-gradient(ellipse at center, rgba(0,169,224,0.8) 0%, rgba(0,169,224,0.55) 50%, rgba(0,169,224,0.18) 80%, rgba(0,169,224,0) 100%)"
+          : editing
+          ? "rgba(0,169,224,0.08)"
+          : "transparent",
+        boxShadow: active && !editing
+          ? `0 0 36px 16px ${highlighted ? "rgba(224,180,0,0.55)" : "rgba(0,169,224,0.55)"}`
+          : "none",
         opacity: dimmed ? 0.4 : 1,
         cursor: editing ? "move" : "pointer",
+        transform: hover && !editing ? "scale(1.06)" : "scale(1)",
+        transition: "background 180ms ease, box-shadow 180ms ease, opacity 150ms ease, transform 180ms ease",
       }}
     >
       {hasKeys && (
