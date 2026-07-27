@@ -277,24 +277,13 @@ export function DashboardView({
             )}
           </form>
 
-          {/* Primary key actions, centred under the search. Navy + brick red
-              keeps them in the flat brand palette rather than a bright accent. */}
+          {/* Primary key actions, centred under the search. Pill-shaped,
+              borderless, shadow + lift on hover — same elevated-card language
+              as the stat tiles and the Export button, not the bordered
+              rounded-md buttons used in tables/forms elsewhere. */}
           <div className="flex items-center gap-3">
-            <Button
-              variant="primary"
-              onClick={onIssue}
-              className="!px-5 !py-2.5 !text-[13px] !rounded-[6px]"
-              style={{ background: DSU.navy, borderColor: DSU.navyDark }}
-            >
-              <Plus size={15} /> Issue Key
-            </Button>
-            <Button
-              variant="dangerSolid"
-              onClick={onReturnKeys}
-              className="!px-5 !py-2.5 !text-[13px] !rounded-[6px]"
-            >
-              <Undo2 size={15} /> Return Key
-            </Button>
+            <PillActionButton icon={<Plus size={15} />} label="Issue Key" onClick={onIssue} bg={DSU.navy} bgHover={DSU.navyHover} />
+            <PillActionButton icon={<Undo2 size={15} />} label="Return Key" onClick={onReturnKeys} bg={DSU.danger} bgHover={DSU.dangerHover} />
           </div>
           </div>
 
@@ -497,6 +486,35 @@ function HeroStatCard({
         {value.toLocaleString()}
       </div>
     </Tag>
+  );
+}
+
+/** Pill-shaped primary action button — borderless, soft shadow that deepens
+ *  and lifts on hover, same elevation language as the stat tiles/hero card,
+ *  used for the Issue/Return actions instead of the bordered form-style
+ *  Button primitive. */
+function PillActionButton({
+  icon, label, onClick, bg, bgHover,
+}: {
+  icon: React.ReactNode; label: string; onClick: () => void; bg: string; bgHover: string;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold rounded-full"
+      style={{
+        background: hover ? bgHover : bg,
+        color: "#fff",
+        boxShadow: hover ? shadow.lg : shadow.sm,
+        transform: hover ? "translateY(-2px)" : "translateY(0)",
+        transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+      }}
+    >
+      {icon} {label}
+    </button>
   );
 }
 
