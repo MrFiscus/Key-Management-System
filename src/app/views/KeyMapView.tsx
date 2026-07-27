@@ -29,7 +29,7 @@ const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 6;
 // Default view frames the lower campus (the academic core, where the buildings
 // and keys are), as a fraction of the stage: full width, from ~38% down.
-const DEFAULT_VIEW = { x0: 0.08, y0: 0.24, x1: 0.74, y1: 1 };
+const DEFAULT_VIEW = { x0: 0.02, y0: 0.3, x1: 0.68, y1: 1 };
 
 /** Same white-card chrome as the Dashboard/PersonView/KeyView — no hairline
  *  border, just a soft shadow and generous rounding. */
@@ -151,8 +151,10 @@ function BuildingNavRow({
 }) {
   const W = 56, H = 56;
   const IMG_W = 896, IMG_H = 1183; // native px of public/campus-map.png
-  const cx = ((box.x + box.width / 2) / 100) * IMG_W;
-  const cy = ((box.y + box.height / 2) / 100) * IMG_H;
+  const THUMB_ZOOM = 0.75; // 25% less zoomed-in than native res, so more context shows
+  const bgW = IMG_W * THUMB_ZOOM, bgH = IMG_H * THUMB_ZOOM;
+  const cx = ((box.x + box.width / 2) / 100) * bgW;
+  const cy = ((box.y + box.height / 2) / 100) * bgH;
 
   return (
     <button
@@ -168,7 +170,7 @@ function BuildingNavRow({
           className="absolute inset-0"
           style={{
             backgroundImage: `url(${MAP_IMG})`,
-            backgroundSize: `${IMG_W}px ${IMG_H}px`,
+            backgroundSize: `${bgW}px ${bgH}px`,
             backgroundPosition: `${-(cx - W / 2)}px ${-(cy - H / 2)}px`,
             backgroundRepeat: "no-repeat",
           }}
@@ -608,13 +610,13 @@ export function KeyMapView({
               box={box}
               count={(keysByBuilding.get(box.id) ?? []).length}
               active={selectedId === box.id}
-              onMouseEnter={() => setSpotlightId(box.id)}
+              onMouseEnter={() => {
+                setSpotlightId(box.id);
+                focusRegion(navRowRegion(box));
+              }}
               onMouseLeave={() => setSpotlightId(null)}
               onClick={() => {
-                focusRegion({
-                  x0: box.x / 100 - 0.03, y0: box.y / 100 - 0.03,
-                  x1: (box.x + box.width) / 100 + 0.03, y1: (box.y + box.height) / 100 + 0.03,
-                });
+                focusRegion(navRowRegion(box));
                 setSelectedId(box.id);
               }}
             />
@@ -827,4 +829,22 @@ function ResizeHandle({
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max);
+}
+
+// Region the "Navigate" list zooms/pans to on hover or click — 7x the
+// building's own width/height, floored to a minimum absolute size. The pure
+// proportional version zoomed in *extremely* tight on the campus's many
+// small/thin buildings (a 7x9 footprint has almost nothing to pad with); the
+// floor keeps every building landing in roughly the same, comfortable zoom
+// range regardless of how small its footprint is.
+const MIN_REGION = 0.22; // fraction of the stage, each axis
+function navRowRegion(box: BuildingBox): { x0: number; y0: number; x1: number; y1: number } {
+  const cx = (box.x + box.width / 2) / 100;
+  const cy = (box.y + box.height / 2) / 100;
+  const w = Math.max((box.width / 100) * 7, MIN_REGION);
+  const h = Math.max((box.height / 100) * 7, MIN_REGION);
+  return {
+    x0: cx - w / 2, y0: cy - h / 2,
+    x1: cx + w / 2, y1: cy + h / 2,
+  };
 }

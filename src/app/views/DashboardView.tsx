@@ -147,15 +147,9 @@ export function DashboardView({
               size/card language throughout: circular icon badge + label on
               top, big number below. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-            <div className="p-5" style={{ ...CARD, background: DSU.navy, color: "#fff" }}>
-              <div className="flex items-start justify-between mb-4">
-                <span className="text-[14px] font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>Keys Out</span>
-                <IconBadge icon={<ArrowUpRight size={16} />} bg="#ffffff" fg={DSU.navy} />
-              </div>
-              <div className="text-[34px] font-bold leading-none tabular">
-                {active.length.toLocaleString()}
-              </div>
-            </div>
+            <HeroStatCard
+              icon={<ArrowUpRight size={16} />} label="Keys Out" value={active.length}
+            />
 
             <StatCard
               icon={<Users size={16} />} badgeBg={DSU.navy}
@@ -439,6 +433,7 @@ function StatCard({
 }: {
   icon: React.ReactNode; badgeBg: string; label: string; value: number; onClick?: () => void;
 }) {
+  const [hover, setHover] = useState(false);
   const inner = (
     <>
       <div className="flex items-start justify-between mb-4">
@@ -450,15 +445,58 @@ function StatCard({
       </div>
     </>
   );
-  if (!onClick) return <div className="p-5" style={CARD}>{inner}</div>;
+  const Tag = onClick ? "button" : "div";
   return (
-    <button
+    <Tag
       onClick={onClick}
-      className="p-5 text-left transition-shadow hover:shadow-md"
-      style={CARD}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className={`p-5 text-left w-full ${onClick ? "cursor-pointer" : ""}`}
+      style={{
+        ...CARD,
+        background: hover ? DSU.tintBg : "#ffffff",
+        boxShadow: hover ? shadow.lg : shadow.sm,
+        transform: hover ? "translateY(-4px)" : "translateY(0)",
+        transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+      }}
     >
       {inner}
-    </button>
+    </Tag>
+  );
+}
+
+/** The featured solid-navy hero tile — same lift/shadow language as StatCard,
+ *  but darkens toward navyHover instead of tinting toward the accent wash. */
+function HeroStatCard({
+  icon, label, value, onClick,
+}: {
+  icon: React.ReactNode; label: string; value: number; onClick?: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className={`p-5 text-left w-full ${onClick ? "cursor-pointer" : ""}`}
+      style={{
+        ...CARD,
+        background: hover ? DSU.navyHover : DSU.navy,
+        color: "#fff",
+        boxShadow: hover ? shadow.lg : shadow.sm,
+        transform: hover ? "translateY(-4px)" : "translateY(0)",
+        transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+      }}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <span className="text-[14px] font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>{label}</span>
+        <IconBadge icon={icon} bg="#ffffff" fg={DSU.navy} />
+      </div>
+      <div className="text-[34px] font-bold leading-none tabular">
+        {value.toLocaleString()}
+      </div>
+    </Tag>
   );
 }
 
