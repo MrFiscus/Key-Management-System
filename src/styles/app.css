@@ -97,6 +97,19 @@ code, kbd, samp, pre {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+@keyframes dsu-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+/* Landing page testimonial rail — the track holds two copies of the same
+   list back to back, so shifting exactly -50% loops seamlessly. Pauses on
+   hover so a reader can actually stop and read one. */
+.dsu-marquee-track {
+  animation: dsu-marquee 38s linear infinite;
+}
+.dsu-marquee-track:hover {
+  animation-play-state: paused;
+}
 
 /* Backdrop fades in a touch slower so it doesn't pop under the panel. */
 .dsu-fade-in  { animation: dsu-fade-in 220ms ease-out; }
@@ -131,6 +144,43 @@ code, kbd, samp, pre {
   animation: dsu-shimmer 1.6s ease-in-out infinite;
 }
 
+/* Scroll-triggered reveal — used on the landing page. An IntersectionObserver
+   adds `.is-visible` the first time an element crosses into view; everything
+   else is a plain opacity/transform transition so it can be delayed per-item
+   for a staggered feel without needing separate keyframes. */
+.dsu-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1), transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.dsu-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.dsu-reveal-left  { transform: translate(-32px, 0); }
+.dsu-reveal-right { transform: translate(32px, 0); }
+.dsu-reveal-left.is-visible,
+.dsu-reveal-right.is-visible { transform: none; }
+
+@keyframes dsu-grow-h {
+  from { height: 0; }
+}
+@keyframes dsu-grow-w {
+  from { width: 0; }
+}
+@keyframes dsu-draw-ring {
+  from { stroke-dashoffset: var(--dsu-ring-len, 300); }
+}
+@keyframes dsu-ping {
+  0%   { transform: scale(0.9); opacity: 0.7; }
+  70%  { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.dsu-ping-ring {
+  animation: dsu-ping 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dsu-fade-in,
   .dsu-pop-in,
@@ -139,8 +189,17 @@ code, kbd, samp, pre {
   .dsu-view,
   .dsu-row-in,
   .dsu-stagger > *,
-  .dsu-skeleton {
+  .dsu-skeleton,
+  .dsu-ping-ring,
+  .dsu-marquee-track {
     animation: none;
+  }
+  .dsu-reveal,
+  .dsu-reveal-left,
+  .dsu-reveal-right {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
   * {
     transition-duration: 0.01ms !important;

@@ -277,12 +277,15 @@ export function KeyDialog({
 // ── Assignment (check out / edit) ─────────────────────────────────────────────
 
 export function AssignmentDialog({
-  assignment, snapshot, defaultPersonId, defaultKeyId, onSave, onClose,
+  assignment, snapshot, defaultPersonId, defaultKeyId, defaultReturned, onSave, onClose,
 }: {
   assignment: Assignment | null;
   snapshot: Snapshot;
   defaultPersonId?: string;
   defaultKeyId?: string;
+  /** Opens the form pre-filled as an already-returned record, for adding
+   *  historical issuances straight into the Returned page. */
+  defaultReturned?: boolean;
   onSave: (input: AssignmentInput) => Promise<{ personId: string; keyId: string } | void>;
   onClose: () => void;
 }) {
@@ -303,7 +306,7 @@ export function AssignmentDialog({
   const [keyStampEdited, setKeyStampEdited] = useState(false);
 
   const [dateIssued, setDateIssued] = useState(assignment?.dateIssued ?? todayIso());
-  const [dateReturned, setDateReturned] = useState(assignment?.dateReturned ?? "");
+  const [dateReturned, setDateReturned] = useState(assignment?.dateReturned ?? (defaultReturned ? todayIso() : ""));
   const [numKeys, setNumKeys] = useState(String(assignment?.numKeys ?? 1));
   const [notes, setNotes] = useState(assignment?.notes ?? "");
   const [parsedRequests, setParsedRequests] = useState<ParsedRequestEntry[]>([]);
@@ -566,7 +569,7 @@ export function AssignmentDialog({
 
   return (
     <Modal
-      title={assignment ? "Edit Assignment" : "Issue Key"}
+      title={assignment ? "Edit Assignment" : defaultReturned ? "Add Returned Record" : "Issue Key"}
       onClose={onClose}
       wide
       footer={
@@ -578,7 +581,7 @@ export function AssignmentDialog({
             variant="primary"
             disabled={busy || (reviewingPdf ? parsedRequests.length === 0 : ((!personId && (!newPersonFirstName.trim() || !newPersonLastName.trim())) || (!keyId && !newKeyStamp.trim())))}
           >
-            {busy ? "Saving…" : assignment ? "Save Changes" : "Issue Key"}
+            {busy ? "Saving…" : assignment ? "Save Changes" : defaultReturned ? "Add Returned Record" : "Issue Key"}
           </Button>
         </>
       }

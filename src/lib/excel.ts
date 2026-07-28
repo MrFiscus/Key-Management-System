@@ -85,6 +85,63 @@ const ALIAS_LOOKUP: Map<string, Field> = (() => {
   return m;
 })();
 
+// ── merge ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Combines a freshly-parsed workbook into the current snapshot instead of
+ * replacing it: people are matched by full name and keys by stamp (both
+ * trimmed/case-folded) so re-importing the same roster doesn't duplicate
+ * rows, and assignments are matched by person+key+issued/returned dates so
+ * the same issuance isn't added twice. Anything that doesn't match becomes
+ * a new row, remapped onto the incoming record's own IDs where needed.
+ */
+export function mergeSnapshots(current: Snapshot, incoming: Snapshot): Snapshot {
+  const norm = (s: string) => s.trim().toLowerCase();
+
+  const people = [...current.people];
+  const personIdMap = new Map<string, string>();
+  const peopleByName = new Map(current.people.map((p) => [norm(p.fullName), p.id]));
+  for (const p of incoming.people) {
+    const existingId = peopleByName.get(norm(p.fullName));
+    if (existingId) {
+      personIdMap.set(p.id, existingId);
+    } else {
+      personIdMap.set(p.id, p.id);
+      people.push(p);
+      peopleByName.set(norm(p.fullName), p.id);
+    }
+  }
+
+  const keys = [...current.keys];
+  const keyIdMap = new Map<string, string>();
+  const keysByStamp = new Map(current.keys.map((k) => [norm(k.keyStamp), k.id]));
+  for (const k of incoming.keys) {
+    const existingId = keysByStamp.get(norm(k.keyStamp));
+    if (existingId) {
+      keyIdMap.set(k.id, existingId);
+    } else {
+      keyIdMap.set(k.id, k.id);
+      keys.push(k);
+      keysByStamp.set(norm(k.keyStamp), k.id);
+    }
+  }
+
+  const assignments = [...current.assignments];
+  const seen = new Set(
+    current.assignments.map((a) => `${a.personId}|${a.keyId}|${a.dateIssued}|${a.dateReturned ?? ""}`),
+  );
+  for (const a of incoming.assignments) {
+    const personId = personIdMap.get(a.personId) ?? a.personId;
+    const keyId = keyIdMap.get(a.keyId) ?? a.keyId;
+    const sig = `${personId}|${keyId}|${a.dateIssued}|${a.dateReturned ?? ""}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    assignments.push({ ...a, personId, keyId });
+  }
+
+  return { people, keys, assignments };
+}
+
 // ── import ────────────────────────────────────────────────────────────────────
 
 export interface ImportReport {

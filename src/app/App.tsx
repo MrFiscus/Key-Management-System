@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search, Key, X, Users, Database, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
-  HardDrive,
+  Key, X, Users, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
+  HardDrive, User as UserIcon, Settings2,
 } from "lucide-react";
 
 import type {
-  Assignment, DataStore, KeyDef, KeyRecord, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
+  Assignment, DataStore, KeyActivity, KeyDef, KeyRecord, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../lib/types";
 import { toRecords } from "../lib/types";
 import { createStore, supabaseConfigured, getSupabase } from "../lib/stores";
 import type { Session } from "@supabase/supabase-js";
 import { DSU, appBarFill, font, radius, shadow, todayIso } from "./theme";
-import { Button, HexBg, SkeletonBar, Toast, ErrorNote } from "./components/primitives";
+import { Avatar, Button, HexBg, SkeletonBar, Toast, ErrorNote } from "./components/primitives";
 import { AssignmentDialog, AssignmentInput, ConfirmDialog, KeyDialog, PersonDialog, ReturnDialog } from "./components/EntityForms";
 import { SearchView } from "./views/SearchView";
 import { RecordsView } from "./views/RecordsView";
@@ -20,23 +20,31 @@ import { KeysView } from "./views/KeysView";
 import { DashboardView } from "./views/DashboardView";
 import { KeyMapView } from "./views/KeyMapView";
 import { LoginView } from "./views/LoginView";
-import { DataView } from "./views/DataView";
 import { PersonView } from "./views/PersonView";
 import { KeyView } from "./views/KeyView";
+import { ProfileView } from "./views/ProfileView";
+import { SettingsView } from "./views/SettingsView";
+import { GroupView } from "./views/GroupView";
 import type { RowActions, SortCol, SortDir } from "./views/KeyTable";
 
-type NavTab = "dashboard" | "directory" | "keys" | "map" | "returned" | "data";
+type NavTab = "dashboard" | "directory" | "keys" | "map" | "returned";
 
 /** Which dialog, if any, is open. */
 type Dialog =
   | { type: "person"; person: Person | null }
   | { type: "key"; keyDef: KeyDef | null }
-  | { type: "assignment"; assignment: Assignment | null; personId?: string; keyId?: string }
+  | { type: "assignment"; assignment: Assignment | null; personId?: string; keyId?: string; defaultReturned?: boolean }
   | { type: "return" }
   | { type: "confirm"; title: string; message: string; confirmLabel?: string; run: () => Promise<void> };
 
 /** A detail page pushed on top of the current tab. */
-type Detail = { type: "person"; id: string } | { type: "key"; id: string };
+type Detail =
+  | { type: "person"; id: string }
+  | { type: "key"; id: string }
+  | { type: "profile" }
+  | { type: "settings" }
+  | { type: "building"; name: string }
+  | { type: "department"; name: string };
 
 const EMPTY: Snapshot = { people: [], keys: [], assignments: [] };
 
@@ -64,12 +72,21 @@ export default function App() {
 
   const signOut = async () => { await getSupabase()?.auth.signOut(); };
 
+  /** Re-checks the current password before letting a full export proceed —
+   *  returns an error message on failure, null on success. */
+  const reauthorize = async (password: string): Promise<string | null> => {
+    const sb = getSupabase();
+    if (!sb || !session?.user?.email) return "Not signed in.";
+    const { error } = await sb.auth.signInWithPassword({ email: session.user.email, password });
+    return error ? error.message : null;
+  };
+
   const [nav, setNav] = useState<NavTab>("dashboard");
-  const [inputVal, setInputVal] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const searchWrapRef = useRef<HTMLFormElement | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+  const [keyActivity, setKeyActivity] = useState<KeyActivity[]>([]);
   const [sortCol, setSortCol] = useState<SortCol>("dateIssued");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -89,6 +106,16 @@ export default function App() {
   const goBack = () => setStack((s) => s.slice(0, -1));
   const openPerson = (id: string) => openDetail({ type: "person", id });
   const openKey = (id: string) => openDetail({ type: "key", id });
+  const openBuilding = (name: string) => openDetail({ type: "building", name });
+  const openDepartment = (name: string) => openDetail({ type: "department", name });
+  const openProfile = () => {
+    setStack([{ type: "profile" }]);
+    setProfileOpen(false);
+    store.getRecentKeyActivity(session?.user?.email ?? "", 5)
+      .then(setKeyActivity)
+      .catch(() => setKeyActivity([]));
+  };
+  const openSettings = () => { setStack([{ type: "settings" }]); setProfileOpen(false); };
 
   const refresh = useCallback(async () => {
     try {
@@ -106,17 +133,23 @@ export default function App() {
     refresh().finally(() => setLoading(false));
   }, [refresh, gated]);
 
-  // Close the search dropdown when clicking outside the search field.
+  // Close the profile dropdown when clicking outside it.
   useEffect(() => {
-    if (!searchFocused) return;
+    if (!profileOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
-        setSearchFocused(false);
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
       }
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [searchFocused]);
+  }, [profileOpen]);
+
+  // Two letters for the profile avatar: from the signed-in email's local
+  // part, or "LS" (Local Storage) when there's no account at all.
+  const profileInitials = session?.user?.email
+    ? session.user.email.split("@")[0].slice(0, 2).toUpperCase()
+    : "LS";
 
   const records = useMemo(() => toRecords(snapshot), [snapshot]);
 
@@ -143,16 +176,20 @@ export default function App() {
     current?.type === "person" ? snapshot.people.find((p) => p.id === current.id) ?? null : null;
   const currentKey =
     current?.type === "key" ? snapshot.keys.find((k) => k.id === current.id) ?? null : null;
+  const currentBuilding = current?.type === "building" ? current.name : null;
+  const currentDepartment = current?.type === "department" ? current.name : null;
 
   const detailRecords = useMemo(() => {
     if (currentPerson) return records.filter((r) => r.personId === currentPerson.id);
     if (currentKey) return records.filter((r) => r.keyId === currentKey.id);
+    if (currentBuilding) return records.filter((r) => r.building === currentBuilding);
+    if (currentDepartment) return records.filter((r) => r.department === currentDepartment);
     return [];
-  }, [records, currentPerson, currentKey]);
+  }, [records, currentPerson, currentKey, currentBuilding, currentDepartment]);
 
   const TAB_LABEL: Record<NavTab, string> = {
     dashboard: "Dashboard", returned: "Returned",
-    keys: "Catalog", directory: "Directory", data: "Data",
+    keys: "Catalog", directory: "Directory", map: "Map",
   };
 
   /** What Back returns to: the page beneath this one, or the tab if none. */
@@ -162,13 +199,16 @@ export default function App() {
     if (beneath.type === "person") {
       return snapshot.people.find((p) => p.id === beneath.id)?.fullName ?? "previous";
     }
-    return snapshot.keys.find((k) => k.id === beneath.id)?.keyStamp ?? "previous";
+    if (beneath.type === "key") {
+      return snapshot.keys.find((k) => k.id === beneath.id)?.keyStamp ?? "previous";
+    }
+    if (beneath.type === "building" || beneath.type === "department") return beneath.name;
+    return "previous";
   })();
 
   const goToTab = (tab: NavTab) => {
     setStack([]);
     setSearchQuery("");
-    setInputVal("");
     setNav(tab);
   };
 
@@ -177,34 +217,15 @@ export default function App() {
     setSortCol(col);
   };
 
-  const getSearchMatches = () => {
-    const q = inputVal.trim().toLowerCase();
-    if (!q) return { people: [], keys: [] };
-    const people = snapshot.people
-      .filter((p) => p.fullName.toLowerCase().includes(q))
-      .slice(0, 5);
-    const keys = snapshot.keys
-      .filter((k) => (k.keyStamp + (k.roomDescription ?? "")).toLowerCase().includes(q))
-      .slice(0, 5);
-    return { people, keys };
-  };
-
   /** Run a full-text search and switch the main area to the results view. */
   const runSearch = (raw: string) => {
     const q = raw.trim();
     if (!q) return;
-    setInputVal(q);
     setSearchQuery(q);
     setStack([]);
-    setSearchFocused(false);
   };
 
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    runSearch(inputVal);
-  };
-
-  const clearSearch = () => { setInputVal(""); setSearchQuery(""); };
+  const clearSearch = () => setSearchQuery("");
 
   // ── mutations ───────────────────────────────────────────────────────────────
   // Each wraps a store call and refreshes. Errors propagate to the dialog, which
@@ -351,12 +372,7 @@ export default function App() {
     { id: "keys",      label: "Catalog",   icon: <KeyRound size={13} /> },
     { id: "map",       label: "Map",       icon: <MapIcon size={13} /> },
     { id: "returned",  label: "Returned",  icon: <Archive size={13} /> },
-    { id: "data",      label: "Data",      icon: <Database size={13} /> },
   ];
-
-  // On the dashboard landing the search lives in the page body (a large,
-  // centred field), so the compact header search is hidden there to avoid two.
-  const onDashboardHome = nav === "dashboard" && !current && !searchQuery;
 
   // ── auth gate (Supabase mode only) ──
   if (!authReady) {
@@ -428,108 +444,94 @@ export default function App() {
               })}
             </nav>
 
-            {/* Search — fills the middle on mobile, right-aligned on desktop
-                (the desktop nav's flex-1 pushes it over). Hidden on the
-                dashboard home, which carries its own large search field. */}
-            {!onDashboardHome && (
-            <form
-              ref={searchWrapRef}
-              onSubmit={submitSearch}
-              className="relative flex-1 md:flex-none md:w-[190px] lg:w-[260px] md:ml-auto"
-            >
-              <Search
-                size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: "#8a8d92" }}
-              />
-              <input
-                type="text"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                placeholder="Search name or key stamp…"
-                aria-label="Search records"
-                className="w-full pl-8 pr-8 py-1.5 text-[13px] rounded-md border outline-none transition-all duration-150 focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,169,224,0.28)]"
-                style={{
-                  background: "rgba(255,255,255,0.94)",
-                  borderColor: "rgba(255,255,255,0.25)",
-                  color: DSU.darkGray,
-                }}
-              />
-              {inputVal && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  aria-label="Clear search"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                  style={{ color: "#9a9c9f" }}
-                >
-                  <X size={13} />
-                </button>
-              )}
-              {/* Search dropdown — anchored to the field so it never drifts. */}
-              {searchFocused && inputVal.trim() && (() => {
-                const matches = getSearchMatches();
-                const hasResults = matches.people.length > 0 || matches.keys.length > 0;
-                return (
-                  <div
-                    className="absolute top-full left-0 right-0 mt-1 rounded-md border bg-white shadow-lg overflow-y-auto"
-                    style={{ borderColor: DSU.lightBorder, zIndex: 60, maxHeight: "320px" }}
-                  >
-                    {matches.people.length > 0 && (
-                      <div>
-                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>People</div>
-                        {matches.people.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => { setInputVal(""); setSearchFocused(false); setStack([{ type: "person", id: p.id }]); }}
-                            className="w-full text-left px-3 py-2 text-[12px] hover:bg-blue-50 border-b"
-                            style={{ borderColor: DSU.lightBorder }}
-                          >
-                            <div className="font-medium">{p.fullName}</div>
-                            {p.department && <div style={{ fontSize: "11px", color: DSU.midGray }}>{p.department}</div>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {matches.keys.length > 0 && (
-                      <div>
-                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: DSU.midGray, background: "#f5f6f7" }}>Keys</div>
-                        {matches.keys.map((k) => (
-                          <button
-                            key={k.id}
-                            type="button"
-                            onClick={() => { setInputVal(""); setSearchFocused(false); setStack([{ type: "key", id: k.id }]); }}
-                            className="w-full text-left px-3 py-2 text-[12px] hover:bg-blue-50 border-b last:border-0"
-                            style={{ borderColor: DSU.lightBorder }}
-                          >
-                            <div className="font-medium">{k.keyStamp}</div>
-                            {k.roomDescription && <div style={{ fontSize: "11px", color: DSU.midGray }}>{k.roomDescription}</div>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!hasResults && (
-                      <div className="px-3 py-3 text-[12px]" style={{ color: DSU.midGray }}>
-                        No matches for “{inputVal.trim()}”.
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              {/* Submitting is Enter; a visible button would crowd the bar. */}
-              <button type="submit" className="sr-only">Search</button>
-            </form>
-            )}
+            {/* Profile — rightmost of the bar on every screen size. Replaces
+                the old footer's sign-in/sign-out strip; the dropdown reuses
+                the PersonView masthead language (eyebrow label, avatar,
+                serif name row) so an account feels like "a person" too. */}
+            <div ref={profileRef} className="relative flex-shrink-0 ml-auto md:ml-0">
+              <button
+                type="button"
+                onClick={() => setProfileOpen((o) => !o)}
+                aria-label="Account"
+                aria-expanded={profileOpen}
+                className="flex items-center justify-center rounded-full transition-opacity hover:opacity-90"
+              >
+                <Avatar initials={profileInitials} size={32} />
+              </button>
 
-            {/* Hamburger — mobile only, far right, toggles the tab menu. */}
+              {profileOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-[300px] overflow-hidden z-50"
+                  style={{ background: "#fff", borderRadius: radius.lg, boxShadow: shadow.xl }}
+                >
+                  <div className="p-4 flex items-start gap-3">
+                    <Avatar initials={profileInitials} size={44} />
+                    <div className="min-w-0">
+                      <div
+                        className="text-[10.5px] font-semibold uppercase mb-1"
+                        style={{ color: DSU.trojan, letterSpacing: "0.14em" }}
+                      >
+                        {session?.user?.email ? "Signed In" : "Local Session"}
+                      </div>
+                      <div
+                        className="text-[16px] font-semibold leading-tight truncate"
+                        style={{ fontFamily: font.display, color: DSU.navy }}
+                        title={session?.user?.email ?? undefined}
+                      >
+                        {session?.user?.email ?? "Local storage mode"}
+                      </div>
+                      {store.kind === "local" && (
+                        <span
+                          className="inline-flex items-center gap-1 mt-1.5 px-1.5 py-px rounded-sm text-[11px] font-medium"
+                          style={{ background: "#fff3d4", color: "#7a6318" }}
+                          title="Data is stored in this browser only and is not shared or backed up."
+                        >
+                          <HardDrive size={10} /> Local storage
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-t py-1.5" style={{ borderColor: DSU.lightBorder }}>
+                    <button
+                      onClick={openProfile}
+                      className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-[13px] transition-colors hover:bg-[#f4f8fb]"
+                      style={{ color: DSU.darkGray }}
+                    >
+                      <UserIcon size={14} style={{ color: DSU.midGray }} /> View Profile
+                    </button>
+                    <button
+                      onClick={openSettings}
+                      className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-[13px] transition-colors hover:bg-[#f4f8fb]"
+                      style={{ color: DSU.darkGray }}
+                    >
+                      <Settings2 size={14} style={{ color: DSU.midGray }} /> Settings
+                    </button>
+                  </div>
+
+                  {session?.user?.email && (
+                    <div className="px-4 pt-2 pb-4 border-t" style={{ borderColor: DSU.lightBorder }}>
+                      <Button
+                        onClick={() => { signOut(); setProfileOpen(false); }}
+                        className="w-full justify-center"
+                      >
+                        <LogOut size={12} /> Sign out
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Hamburger — mobile only, toggles the tab menu. Each page now
+                carries its own prominent search (Directory/Catalog/Returned/
+                Dashboard/Map), so the header no longer needs one. */}
             <button
               type="button"
               onClick={() => setMobileNavOpen((o) => !o)}
               aria-label="Menu"
               aria-expanded={mobileNavOpen}
-              className="md:hidden flex items-center justify-center w-8 h-8 rounded-md transition-colors flex-shrink-0 ml-auto"
+              className="md:hidden flex items-center justify-center w-8 h-8 rounded-md transition-colors flex-shrink-0 ml-2"
               style={{ color: "#fff", background: mobileNavOpen ? "rgba(255,255,255,0.18)" : "transparent" }}
             >
               {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
@@ -617,6 +619,7 @@ export default function App() {
             onDelete={() => confirmDeletePerson(currentPerson)}
             onIssue={() => setDialog({ type: "assignment", assignment: null, personId: currentPerson.id })}
             onSelectKey={openKey}
+            onSelectBuilding={openBuilding}
           />
         ) : currentKey ? (
           <KeyView
@@ -629,6 +632,57 @@ export default function App() {
             onDelete={() => confirmDeleteKey(currentKey)}
             onIssue={() => setDialog({ type: "assignment", assignment: null, keyId: currentKey.id })}
             onSelectPerson={openPerson}
+            onSelectBuilding={openBuilding}
+            onSelectDepartment={openDepartment}
+          />
+        ) : currentBuilding ? (
+          <GroupView
+            kind="building"
+            name={currentBuilding}
+            records={detailRecords}
+            actions={rowActions}
+            onBack={goBack}
+            backLabel={backLabel}
+            onSelectPerson={openPerson}
+            onSelectKey={openKey}
+          />
+        ) : currentDepartment ? (
+          <GroupView
+            kind="department"
+            name={currentDepartment}
+            records={detailRecords}
+            actions={rowActions}
+            onBack={goBack}
+            backLabel={backLabel}
+            onSelectPerson={openPerson}
+            onSelectKey={openKey}
+          />
+        ) : current?.type === "profile" ? (
+          <ProfileView
+            email={session?.user?.email ?? null}
+            storeKind={store.kind}
+            createdAt={session?.user?.created_at ?? null}
+            snapshot={snapshot}
+            onBack={goBack}
+            backLabel={backLabel}
+            onSignOut={signOut}
+            onOpenSettings={openSettings}
+            keyActivity={keyActivity}
+            onSelectKey={openKey}
+          />
+        ) : current?.type === "settings" ? (
+          <SettingsView
+            storeKind={store.kind}
+            mapEditing={mapEditing}
+            onToggleMapEditing={() => setMapEditing((v) => !v)}
+            onBack={goBack}
+            backLabel={backLabel}
+            store={store}
+            snapshot={snapshot}
+            onImported={refresh}
+            onToast={setToast}
+            requireReauth={store.kind === "supabase"}
+            onReauthorize={reauthorize}
           />
         ) : searchQuery ? (
           /* Results overlay whichever tab you were on; clearing returns to it. */
@@ -649,6 +703,8 @@ export default function App() {
               actions={rowActions}
               onSelectPerson={openPerson}
               onSelectKey={openKey}
+              onSelectBuilding={openBuilding}
+              onSelectDepartment={openDepartment}
             />
           </>
         ) : (
@@ -664,6 +720,9 @@ export default function App() {
                 actions={rowActions}
                 onSelectPerson={openPerson}
                 onSelectKey={openKey}
+                onSelectBuilding={openBuilding}
+                onSelectDepartment={openDepartment}
+                onAddReturned={() => setDialog({ type: "assignment", assignment: null, defaultReturned: true })}
                 emptyMessage="No keys have been returned yet."
               />
             )}
@@ -676,6 +735,8 @@ export default function App() {
                 onEdit={(k) => setDialog({ type: "key", keyDef: k })}
                 onDelete={confirmDeleteKey}
                 onSelectKey={openKey}
+                onSelectBuilding={openBuilding}
+                onSelectDepartment={openDepartment}
               />
             )}
 
@@ -689,6 +750,8 @@ export default function App() {
                 onDeletePerson={confirmDeletePerson}
                 onSelectPerson={openPerson}
                 onSelectKey={openKey}
+                onSelectBuilding={openBuilding}
+                onSelectDepartment={openDepartment}
               />
             )}
 
@@ -699,6 +762,7 @@ export default function App() {
                 onSelectPerson={openPerson}
                 onSelectKey={openKey}
                 onGoToTab={goToTab}
+                onOpenData={openSettings}
                 onSearch={runSearch}
                 onIssue={() => setDialog({ type: "assignment", assignment: null })}
                 onReturnKeys={() => setDialog({ type: "return" })}
@@ -710,78 +774,14 @@ export default function App() {
                 records={activeRecords}
                 onSelectKey={openKey}
                 onSelectPerson={openPerson}
+                onSelectBuilding={openBuilding}
                 store={store}
                 editing={mapEditing}
-              />
-            )}
-
-            {nav === "data" && (
-              <DataView
-                store={store}
-                snapshot={snapshot}
-                onImported={refresh}
-                onToast={setToast}
-                mapEditing={mapEditing}
-                onToggleMapEditing={() => setMapEditing((v) => !v)}
               />
             )}
           </div>
         )}
       </main>
-
-      {/* ── Footer ── */}
-      <footer style={{ borderTop: `1px solid ${DSU.lightBorder}`, background: "rgba(255,255,255,0.75)" }}>
-        <div
-          className="w-full px-4 sm:px-6 py-2.5 flex items-center justify-between text-[11px] gap-x-4 gap-y-1.5 flex-wrap"
-          style={{ color: "#9a9c9f" }}
-        >
-          <span className="flex items-center gap-2 flex-wrap">
-            <span
-              className="flex items-center justify-center w-4 h-4 rounded-sm flex-shrink-0"
-              style={{ background: DSU.trojan }}
-              aria-hidden="true"
-            >
-              <Key size={9} color="white" />
-            </span>
-            <span className="font-medium" style={{ color: "#84878c" }}>Facilities Key Management</span>
-            {!loading && !gated && (
-              <span className="tabular" style={{ color: "#b7bac0" }}>
-                · {snapshot.assignments.length.toLocaleString()} records · {snapshot.people.length.toLocaleString()}{" "}
-                people · {snapshot.keys.length.toLocaleString()} keys
-              </span>
-            )}
-          </span>
-
-          <span className="flex items-center gap-2 flex-wrap">
-            {store.kind === "local" && (
-              <span
-                className="inline-flex items-center gap-1 px-1.5 py-px rounded-sm font-medium"
-                style={{ background: "#fff3d4", color: "#7a6318" }}
-                title="Data is stored in this browser only and is not shared or backed up."
-              >
-                <HardDrive size={10} /> Local storage
-              </span>
-            )}
-            {session?.user?.email && (
-              <>
-                <span className="inline-flex items-center gap-1" title="Signed in">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#3aa76d" }} />
-                  {session.user.email}
-                </span>
-                <button
-                  onClick={signOut}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border transition-colors"
-                  style={{ borderColor: DSU.lightBorder, color: DSU.navy }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = DSU.tintBg)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <LogOut size={12} /> Sign out
-                </button>
-              </>
-            )}
-          </span>
-        </div>
-      </footer>
 
       {/* ── Dialogs ── */}
       {dialog?.type === "person" && (
@@ -808,6 +808,7 @@ export default function App() {
           snapshot={snapshot}
           defaultPersonId={dialog.personId}
           defaultKeyId={dialog.keyId}
+          defaultReturned={dialog.defaultReturned}
           onSave={(input) => saveAssignment(input, dialog.assignment)}
           onClose={() => setDialog(null)}
         />

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
-  Assignment, DataStore, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
+  Assignment, DataStore, KeyActivity, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
 
 /**
@@ -156,14 +156,35 @@ export class SupabaseStore implements DataStore {
   updatePerson = (id: string, p: Partial<NewPerson>) => this.patch("people", id, personToRow(p), rowToPerson);
   deletePerson = (id: string) => this.remove("people", id);
 
-  createKey = (input: NewKeyDef) => this.insert("keys", keyToRow(input), rowToKey);
-  updateKey = (id: string, p: Partial<NewKeyDef>) => this.patch("keys", id, keyToRow(p), rowToKey);
+  createKey = async (input: NewKeyDef) => {
+    const key = await this.insert("keys", keyToRow(input), rowToKey);
+    this.logKeyActivity(key, "created");
+    return key;
+  };
+  updateKey = async (id: string, p: Partial<NewKeyDef>) => {
+    const key = await this.patch("keys", id, keyToRow(p), rowToKey);
+    this.logKeyActivity(key, "updated");
+    return key;
+  };
   deleteKey = (id: string) => this.remove("keys", id);
 
-  createAssignment = (input: NewAssignment) =>
-    this.insert("assignments", assignmentToRow(input), rowToAssignment);
-  updateAssignment = (id: string, p: Partial<NewAssignment>) =>
-    this.patch("assignments", id, assignmentToRow(p), rowToAssignment);
+  createAssignment = async (input: NewAssignment) => {
+    const assignment = await this.insert("assignments", assignmentToRow(input), rowToAssignment);
+    this.logAssignmentActivity(assignment.keyId, "issued");
+    return assignment;
+  };
+  updateAssignment = async (id: string, p: Partial<NewAssignment>) => {
+    // Look up the pre-patch state so a full-form edit that just re-sends an
+    // already-returned date doesn't get logged as a new "return" every time.
+    let wasOpen = false;
+    if (p.dateReturned !== undefined) {
+      const { data: before } = await this.client.from("assignments").select("date_returned").eq("id", id).single();
+      wasOpen = !before?.date_returned;
+    }
+    const assignment = await this.patch("assignments", id, assignmentToRow(p), rowToAssignment);
+    if (wasOpen && assignment.dateReturned) this.logAssignmentActivity(assignment.keyId, "returned");
+    return assignment;
+  };
   deleteAssignment = (id: string) => this.remove("assignments", id);
 
   /**
@@ -215,5 +236,56 @@ export class SupabaseStore implements DataStore {
       .from("map_layout")
       .upsert({ id: 1, data: layout, updated_at: new Date().toISOString() });
     if (error) throw explain(error);
+  }
+
+  // ── key activity ────────────────────────────────────────────────────────────
+  // See migration 0004_key_activity.sql. Logging is best-effort: a failure
+  // here should never block the actual key create/update from succeeding.
+
+  private async logActivity(keyId: string, keyStamp: string, action: KeyActivity["action"]) {
+    try {
+      const { data } = await this.client.auth.getUser();
+      await this.client.from("key_activity").insert({
+        key_id: keyId,
+        key_stamp: keyStamp,
+        action,
+        actor_email: data.user?.email ?? null,
+      });
+    } catch {
+      // Not the user's problem — the key/assignment edit itself already succeeded.
+    }
+  }
+
+  private logKeyActivity(key: KeyDef, action: "created" | "updated") {
+    return this.logActivity(key.id, key.keyStamp, action);
+  }
+
+  /** Assignments only carry a keyId, so look up its stamp before logging. */
+  private async logAssignmentActivity(keyId: string, action: "issued" | "returned") {
+    try {
+      const { data: keyRow, error } = await this.client.from("keys").select("key_stamp").eq("id", keyId).single();
+      if (error || !keyRow) return;
+      await this.logActivity(keyId, keyRow.key_stamp, action);
+    } catch {
+      // Best-effort — never block the issuance/return itself.
+    }
+  }
+
+  async getRecentKeyActivity(actorEmail: string, limit = 5): Promise<KeyActivity[]> {
+    const { data, error } = await this.client
+      .from("key_activity")
+      .select("*")
+      .eq("actor_email", actorEmail)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw explain(error);
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      keyId: r.key_id,
+      keyStamp: r.key_stamp,
+      action: r.action,
+      actorEmail: r.actor_email,
+      at: r.created_at,
+    }));
   }
 }

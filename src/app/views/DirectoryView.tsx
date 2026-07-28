@@ -4,14 +4,17 @@ import {
   Pencil, Plus, Trash2, X, User, Briefcase, Building2, KeyRound, Tags, Settings2,
 } from "lucide-react";
 import { initialsOf, type KeyRecord, type Person } from "../../lib/types";
-import { DSU, formatDate, headerFill, headerFillActive, radius, shadow } from "../theme";
+import { DSU, font, formatDate, headerFill, headerFillActive, radius, shadow } from "../theme";
 import {
-  Avatar, Button, EmptyState, KeyChip, SectionHeader, SelectInput, Stamp, TextInput,
+  Avatar, Button, EmptyState, PageSearchBar, SelectInput, Stamp,
 } from "../components/primitives";
 import type { RowActions } from "./KeyTable";
 
 /** Shared row hover tint. */
 const HOVER_ROW = "#f0f7fc";
+
+/** Symmetric grid columns for the per-person expanded keys list. */
+const DIRECTORY_KEYS_COLS = "100px minmax(0,1fr) minmax(0,1fr) 96px 108px";
 
 /**
  * One row per person, expandable to show their keys in place. A row-per-person
@@ -30,6 +33,7 @@ interface Row {
 
 export function DirectoryView({
   people, records, actions, onAddPerson, onEditPerson, onDeletePerson, onSelectPerson, onSelectKey,
+  onSelectBuilding, onSelectDepartment,
 }: {
   people: Person[];
   /** Active records only — returned keys live on the Returned tab. */
@@ -40,6 +44,8 @@ export function DirectoryView({
   onDeletePerson: (p: Person) => void;
   onSelectPerson: (personId: string) => void;
   onSelectKey: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -122,19 +128,20 @@ export function DirectoryView({
 
   return (
     <div>
-      <SectionHeader title="Key Holder Directory" count={rows.length} noun="person">
+      <div className="flex items-center justify-between gap-3 mb-5 pb-3 border-b flex-wrap" style={{ borderColor: DSU.lightBorder }}>
+        <h1 className="text-[26px] font-semibold shrink-0" style={{ fontFamily: font.display, color: DSU.navy }}>
+          Key Holder Directory
+        </h1>
+
         <div className="flex items-center gap-2 flex-wrap">
-          <TextInput
+          <PageSearchBar
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter by name, dept, or stamp…"
-            className="!text-[12px] !py-1 w-[210px]"
-            aria-label="Filter people"
+            onChange={setSearch}
+            placeholder="Search by name, dept, building, or stamp…"
           />
           <SelectInput
             value={filterBuilding}
             onChange={(e) => setFilterBuilding(e.target.value)}
-            className="!text-[12px] !py-1"
             aria-label="Building"
           >
             <option value="">All buildings</option>
@@ -143,7 +150,6 @@ export function DirectoryView({
           <SelectInput
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
-            className="!text-[12px] !py-1"
             aria-label="Department"
           >
             <option value="">All departments</option>
@@ -151,7 +157,7 @@ export function DirectoryView({
           </SelectInput>
 
           <label
-            className="flex items-center gap-1.5 text-[12px] cursor-pointer select-none px-2 py-1 rounded border"
+            className="flex items-center gap-1.5 text-[13px] cursor-pointer select-none px-2.5 py-1.5 rounded-md border"
             style={{
               color: withKeysOnly ? DSU.navy : DSU.midGray,
               borderColor: withKeysOnly ? DSU.trojan : DSU.lightBorder,
@@ -181,7 +187,7 @@ export function DirectoryView({
             <Plus size={12} /> Add Person
           </Button>
         </div>
-      </SectionHeader>
+      </div>
 
       {rows.length === 0 ? (
         <EmptyState
@@ -239,6 +245,8 @@ export function DirectoryView({
                     onEdit={() => onEditPerson(person)}
                     onDelete={() => onDeletePerson(person)}
                     onSelectKey={onSelectKey}
+                    onSelectBuilding={onSelectBuilding}
+                    onSelectDepartment={onSelectDepartment}
                     actions={actions}
                   />
                 ))}
@@ -296,7 +304,8 @@ function Th({
 // ── one person: summary row plus an optional expanded detail row ──────────────
 
 function PersonRows({
-  person, records, isOpen, index, base, onToggle, onOpen, onEdit, onDelete, onSelectKey, actions,
+  person, records, isOpen, index, base, onToggle, onOpen, onEdit, onDelete, onSelectKey,
+  onSelectBuilding, onSelectDepartment, actions,
 }: {
   person: Person;
   records: KeyRecord[];
@@ -308,6 +317,8 @@ function PersonRows({
   onEdit: () => void;
   onDelete: () => void;
   onSelectKey: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
   actions: RowActions;
 }) {
   const ordered = useMemo(
@@ -315,28 +326,34 @@ function PersonRows({
     [records],
   );
 
+  const showCard = isOpen && ordered.length > 0;
+
   return (
     <>
       <tr
         className="border-b group transition-colors dsu-row-in"
         style={{
           borderColor: "#eaebec",
-          background: isOpen ? HOVER_ROW : base,
+          background: showCard ? "#ffffff" : base,
           animationDelay: `${Math.min(index, 14) * 16}ms`,
-          boxShadow: isOpen ? `inset 3px 0 0 ${DSU.trojan}` : "none",
         }}
         onMouseEnter={(e) => {
+          if (showCard) return;
           e.currentTarget.style.background = HOVER_ROW;
           e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = isOpen ? HOVER_ROW : base;
-          e.currentTarget.style.boxShadow = isOpen ? `inset 3px 0 0 ${DSU.trojan}` : "none";
+          if (showCard) return;
+          e.currentTarget.style.background = base;
+          e.currentTarget.style.boxShadow = "none";
         }}
       >
-        {/* Accent runs down the left of the open row and its detail block,
-            tying the two together as one unit. */}
-        <td className="pl-2" style={isOpen ? { boxShadow: `inset 3px 0 0 ${DSU.trojan}` } : undefined}>
+        {/* Toggle stays in this exact cell whichever state we're in, so the
+            button never jumps when the row expands or collapses. */}
+        <td
+          className={`pl-2 align-top ${showCard ? "pt-[13px]" : "pt-1.5"}`}
+          style={showCard ? { boxShadow: `inset 3px 0 0 ${DSU.trojan}` } : undefined}
+        >
           <button
             onClick={onToggle}
             aria-expanded={isOpen}
@@ -349,170 +366,252 @@ function PersonRows({
           </button>
         </td>
 
-        <td className="px-3 py-1.5 whitespace-nowrap">
-          <button
-            onClick={onOpen}
-            className="inline-flex items-center gap-2 text-left hover:underline font-medium"
-            style={{ color: DSU.navy }}
-            title={`View ${person.fullName}`}
-          >
-            <Avatar initials={initialsOf(person.fullName)} size={26} />
-            {person.fullName}
-          </button>
-        </td>
-
-        <td className="px-3 py-1.5 whitespace-nowrap">{person.department || <Dash />}</td>
-        <td className="px-3 py-1.5 whitespace-nowrap">{person.building || <Dash />}</td>
-
-        <td className="px-3 py-1.5 text-center">
-          {records.length > 0 ? (
-            <span
-              className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-sm"
-              style={{ background: "#daf0fa", color: "#006a96", border: "1px solid #a8ddf4" }}
-            >
-              {records.length}
-            </span>
-          ) : (
-            <span className="text-[11px]" style={{ color: "#b0b2b5" }}>—</span>
-          )}
-        </td>
-
-        {/* Stamps inline so "what does she have?" is answered without expanding. */}
-        <td className="px-3 py-1.5">
-          {ordered.length === 0 ? (
-            <span className="text-[11px]" style={{ color: "#b0b2b5" }}>no keys out</span>
-          ) : (
-            <span className="flex items-center gap-1.5 flex-wrap">
-              {ordered.slice(0, 4).map((r) => (
-                <Stamp key={r.assignmentId} stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} size={11} />
-              ))}
-              {ordered.length > 4 && (
-                <button onClick={onToggle} className="text-[11px] hover:underline" style={{ color: DSU.midGray }}>
-                  +{ordered.length - 4} more
-                </button>
-              )}
-            </span>
-          )}
-        </td>
-
-        <td className="px-3 py-1.5">
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            <button
-              onClick={onEdit}
-              title="Edit person" aria-label="Edit person"
-              className="p-1 rounded hover:bg-black/[0.07]"
-              style={{ color: DSU.midGray }}
-            >
-              <Pencil size={13} />
-            </button>
-            <button
-              onClick={onDelete}
-              title="Delete person" aria-label="Delete person"
-              className="p-1 rounded hover:bg-black/[0.07]"
-              style={{ color: DSU.danger }}
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
-        </td>
-      </tr>
-
-      {isOpen && ordered.length > 0 && (
-        <tr>
-          <td
-            colSpan={7}
-            className="p-0"
-            style={{ background: "#eef7fc", boxShadow: `inset 3px 0 0 ${DSU.trojan}` }}
-          >
-            {/* 41px + the 3px accent lines this up with the person's name above,
-                past the chevron column. */}
-            <div className="pl-[41px] pr-3 py-2.5 border-b" style={{ borderColor: "#d3e3ec" }}>
-              <div className="text-[11px] font-semibold mb-1.5" style={{ color: DSU.navy }}>
-                {ordered.length} key{ordered.length === 1 ? "" : "s"} held by {person.fullName}
-              </div>
-              <table
-                className="w-full border-collapse text-[12px] bg-white rounded overflow-hidden"
-                style={{ color: DSU.darkGray, border: "1px solid #d9e5ec" }}
+        {showCard ? (
+          <td colSpan={6} className="py-2.5 pr-8">
+            <div className="overflow-hidden bg-white">
+              {/* ── Person header ── the only place this person's identity
+                  shows while expanded, since the rest of this row's columns
+                  are hidden. Click it (like the chevron) to collapse. */}
+              <div
+                onClick={onToggle}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+                aria-expanded={isOpen}
+                aria-label={`Collapse ${person.fullName}`}
+                className="w-full flex items-center gap-3 px-4 py-3 border-b text-left transition-colors hover:bg-black/[0.02] cursor-pointer"
+                style={{ borderColor: "#eef1f3" }}
               >
-                <thead>
-                  <tr style={{ background: "#f5fafd", borderBottom: "1px solid #d9e5ec" }}>
-                    {["Key", "Room", "Building", "Issued"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-2 py-1 text-left font-semibold text-[11px]"
-                        style={{ color: DSU.midGray }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                    <th className="px-2 py-1 text-right font-semibold text-[11px]" style={{ color: DSU.midGray }}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ordered.map((r, i) => (
-                    <tr
+                <Avatar initials={initialsOf(person.fullName)} size={38} />
+                <div className="min-w-0">
+                  <div className="text-[14px] font-semibold truncate" style={{ color: DSU.navy }}>
+                    {person.fullName}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-[12px] flex-wrap" style={{ color: DSU.midGray }}>
+                    <span className="inline-flex items-center gap-1">
+                      <Building2 size={11} style={{ color: DSU.trojan }} />
+                      {person.building ? (
+                        onSelectBuilding ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onSelectBuilding(person.building!); }}
+                            className="hover:underline"
+                            style={{ font: "inherit" }}
+                          >
+                            {person.building}
+                          </button>
+                        ) : person.building
+                      ) : <Dash />}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Briefcase size={11} style={{ color: DSU.trojan }} />
+                      {person.department ? (
+                        onSelectDepartment ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onSelectDepartment(person.department!); }}
+                            className="hover:underline"
+                            style={{ font: "inherit" }}
+                          >
+                            {person.department}
+                          </button>
+                        ) : person.department
+                      ) : <Dash />}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+                <div
+                  className="grid px-4 py-2 text-[11px] font-semibold"
+                  style={{
+                    gridTemplateColumns: DIRECTORY_KEYS_COLS, gap: 14,
+                    background: "color-mix(in srgb, #00A9E0 7%, white)", color: DSU.midGray,
+                  }}
+                >
+                  <div>Key</div>
+                  <div>Room</div>
+                  <div>Dept</div>
+                  <div>Issued</div>
+                  <div className="text-right">Actions</div>
+                </div>
+                {ordered.map((r, i) => {
+                  const room = r.roomNumber || r.roomDescription
+                    ? [r.roomNumber, r.roomDescription].filter(Boolean).join(" · ")
+                    : null;
+                  const rowBg = i % 2 === 0 ? "#ffffff" : "#f7f9fa";
+                  return (
+                    <div
                       key={r.assignmentId}
-                      className="group/key"
-                      style={{ borderTop: i === 0 ? "none" : "1px solid #eef2f5" }}
+                      className="group/key grid items-center px-4 py-2 transition-colors"
+                      style={{ gridTemplateColumns: DIRECTORY_KEYS_COLS, gap: 14, background: rowBg }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = HOVER_ROW;
+                        e.currentTarget.style.boxShadow = `inset 3px 0 0 ${DSU.trojan}`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = rowBg;
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
                     >
-                      <td className="px-2 py-1 whitespace-nowrap">
-                        <KeyChip stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} size={11} />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <button
+                          onClick={() => onSelectKey(r.keyId)}
+                          title={`View key ${r.keyStamp}`}
+                          className="font-mono font-bold rounded-md px-2 py-1 transition-colors shrink-0"
+                          style={{ fontSize: 12.5, color: "#fff", background: DSU.trojan }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = DSU.trojanDark)}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = DSU.trojan)}
+                        >
+                          {r.keyStamp}
+                        </button>
                         {r.numKeys > 1 && (
                           <span
-                            className="ml-1.5 text-[10px] font-semibold px-1 py-px rounded-sm"
+                            className="text-[10px] font-semibold px-1 py-px rounded-sm shrink-0"
                             style={{ background: "#e8eaec", color: DSU.midGray }}
                             title={`${r.numKeys} copies`}
                           >
                             ×{r.numKeys}
                           </span>
                         )}
-                      </td>
-                      <td className="px-2 py-1">
-                        {r.roomNumber && <span className="font-mono text-[11px] font-medium">{r.roomNumber}</span>}
-                        {r.roomNumber && r.roomDescription && <span style={{ color: "#c3c5c8" }}> · </span>}
-                        {r.roomDescription}
-                        {!r.roomNumber && !r.roomDescription && <Dash />}
-                      </td>
-                      <td className="px-2 py-1 whitespace-nowrap">{r.building || <Dash />}</td>
-                      <td className="px-2 py-1 whitespace-nowrap font-mono text-[11px]">{formatDate(r.dateIssued)}</td>
-                      <td className="px-2 py-1">
-                        <div className="flex items-center justify-end gap-1 opacity-40 group-hover/key:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => actions.onReturn(r)}
-                            title="Mark returned" aria-label="Mark returned"
-                            className="p-1 rounded hover:bg-black/[0.07]"
-                            style={{ color: DSU.navy }}
-                          >
-                            <CornerDownLeft size={12} />
+                      </div>
+
+                      <div className="text-[13px] font-medium truncate min-w-0" style={{ color: DSU.darkGray }} title={room ?? undefined}>
+                        {room ? (
+                          <button onClick={() => onSelectKey(r.keyId)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                            {room}
                           </button>
-                          <button
-                            onClick={() => actions.onEdit(r)}
-                            title="Edit" aria-label="Edit"
-                            className="p-1 rounded hover:bg-black/[0.07]"
-                            style={{ color: DSU.midGray }}
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          <button
-                            onClick={() => actions.onDelete(r)}
-                            title="Delete" aria-label="Delete"
-                            className="p-1 rounded hover:bg-black/[0.07]"
-                            style={{ color: DSU.danger }}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        ) : <Dash />}
+                      </div>
+                      <div className="text-[13px] truncate min-w-0" style={{ color: DSU.darkGray }} title={r.department || undefined}>
+                        {r.department ? (
+                          onSelectDepartment ? (
+                            <button onClick={() => onSelectDepartment(r.department)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                              {r.department}
+                            </button>
+                          ) : r.department
+                        ) : <Dash />}
+                      </div>
+                      <div className="text-[11.5px] tabular truncate" style={{ color: DSU.midGray }}>
+                        {formatDate(r.dateIssued)}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1 opacity-40 group-hover/key:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => actions.onReturn(r)}
+                          title="Mark returned" aria-label="Mark returned"
+                          className="p-1.5 rounded-lg hover:bg-black/[0.06]"
+                          style={{ color: DSU.navy }}
+                        >
+                          <CornerDownLeft size={14} />
+                        </button>
+                        <button
+                          onClick={() => actions.onEdit(r)}
+                          title="Edit" aria-label="Edit"
+                          className="p-1.5 rounded-lg hover:bg-black/[0.06]"
+                          style={{ color: DSU.midGray }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => actions.onDelete(r)}
+                          title="Delete" aria-label="Delete"
+                          className="p-1.5 rounded-lg hover:bg-black/[0.06]"
+                          style={{ color: DSU.danger }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </td>
-        </tr>
-      )}
+        ) : (
+          <>
+            <td className="px-3 py-1.5 whitespace-nowrap">
+              <button
+                onClick={onOpen}
+                className="inline-flex items-center gap-2 text-left hover:underline font-medium"
+                style={{ color: DSU.navy }}
+                title={`View ${person.fullName}`}
+              >
+                <Avatar initials={initialsOf(person.fullName)} size={26} />
+                {person.fullName}
+              </button>
+            </td>
+
+            <td className="px-3 py-1.5 whitespace-nowrap">
+              {person.department ? (
+                onSelectDepartment ? (
+                  <button onClick={() => onSelectDepartment(person.department!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                    {person.department}
+                  </button>
+                ) : person.department
+              ) : <Dash />}
+            </td>
+            <td className="px-3 py-1.5 whitespace-nowrap">
+              {person.building ? (
+                onSelectBuilding ? (
+                  <button onClick={() => onSelectBuilding(person.building!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                    {person.building}
+                  </button>
+                ) : person.building
+              ) : <Dash />}
+            </td>
+
+            <td className="px-3 py-1.5 text-center">
+              {records.length > 0 ? (
+                <span
+                  className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-sm"
+                  style={{ background: "#daf0fa", color: "#006a96", border: "1px solid #a8ddf4" }}
+                >
+                  {records.length}
+                </span>
+              ) : (
+                <span className="text-[11px]" style={{ color: "#b0b2b5" }}>—</span>
+              )}
+            </td>
+
+            {/* Stamps inline so "what does she have?" is answered without expanding. */}
+            <td className="px-3 py-1.5">
+              {ordered.length === 0 ? (
+                <span className="text-[11px]" style={{ color: "#b0b2b5" }}>no keys out</span>
+              ) : (
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  {ordered.slice(0, 4).map((r) => (
+                    <Stamp key={r.assignmentId} stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} size={11} />
+                  ))}
+                  {ordered.length > 4 && (
+                    <button onClick={onToggle} className="text-[11px] hover:underline" style={{ color: DSU.midGray }}>
+                      +{ordered.length - 4} more
+                    </button>
+                  )}
+                </span>
+              )}
+            </td>
+
+            <td className="px-3 py-1.5">
+              <div className="flex items-center justify-end gap-1 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <button
+                  onClick={onEdit}
+                  title="Edit person" aria-label="Edit person"
+                  className="p-1 rounded hover:bg-black/[0.07]"
+                  style={{ color: DSU.midGray }}
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  onClick={onDelete}
+                  title="Delete person" aria-label="Delete person"
+                  className="p-1 rounded hover:bg-black/[0.07]"
+                  style={{ color: DSU.danger }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </td>
+          </>
+        )}
+      </tr>
     </>
   );
 }

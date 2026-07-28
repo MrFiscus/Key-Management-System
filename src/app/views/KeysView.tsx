@@ -3,8 +3,8 @@ import {
   Pencil, Plus, Trash2, X, Users, KeyRound, Hash, StickyNote, Building2, Briefcase, Settings2,
 } from "lucide-react";
 import type { KeyDef, KeyRecord } from "../../lib/types";
-import { DSU, headerFill, radius, shadow } from "../theme";
-import { Button, EmptyState, SectionHeader, SelectInput, Stamp, TextInput } from "../components/primitives";
+import { DSU, font, headerFill, radius, shadow } from "../theme";
+import { Button, EmptyState, PageSearchBar, SelectInput, Stamp } from "../components/primitives";
 
 /** Shared row hover tint. */
 const HOVER_ROW = "#f0f7fc";
@@ -16,7 +16,7 @@ const HOVER_ROW = "#f0f7fc";
  * the number that matters when a key goes missing.
  */
 export function KeysView({
-  keys, records, onAdd, onEdit, onDelete, onSelectKey,
+  keys, records, onAdd, onEdit, onDelete, onSelectKey, onSelectBuilding, onSelectDepartment,
 }: {
   keys: KeyDef[];
   records: KeyRecord[];
@@ -24,6 +24,8 @@ export function KeysView({
   onEdit: (k: KeyDef) => void;
   onDelete: (k: KeyDef) => void;
   onSelectKey: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [building, setBuilding] = useState("");
@@ -58,19 +60,20 @@ export function KeysView({
 
   return (
     <div>
-      <SectionHeader title="Key Catalog" count={filtered.length} noun="key">
+      <div className="flex items-center justify-between gap-3 mb-5 pb-3 border-b flex-wrap" style={{ borderColor: DSU.lightBorder }}>
+        <h1 className="text-[26px] font-semibold shrink-0" style={{ fontFamily: font.display, color: DSU.navy }}>
+          Key Catalog
+        </h1>
+
         <div className="flex items-center gap-2 flex-wrap">
-          <TextInput
+          <PageSearchBar
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter keys…"
-            className="!text-[12px] !py-1"
-            aria-label="Filter keys"
+            onChange={setSearch}
+            placeholder="Search by stamp, room, building…"
           />
           <SelectInput
             value={building}
             onChange={(e) => setBuilding(e.target.value)}
-            className="!text-[12px] !py-1"
             aria-label="Building"
           >
             <option value="">All buildings</option>
@@ -86,7 +89,7 @@ export function KeysView({
           )}
           <Button variant="primary" onClick={onAdd}><Plus size={12} /> Add Key</Button>
         </div>
-      </SectionHeader>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState message={keys.length === 0 ? "No keys yet. Add one or import your spreadsheet." : "No keys match this filter."} />
@@ -151,10 +154,38 @@ export function KeysView({
                     <td className="px-3 py-2">
                       <Stamp stamp={k.keyStamp} onClick={() => onSelectKey(k.id)} />
                     </td>
-                    <td className="px-3 py-2 font-mono text-[12px]">{k.roomNumber || <Dash />}</td>
-                    <td className="px-3 py-2">{k.roomDescription || <Dash />}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{k.building || <Dash />}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{k.department || <Dash />}</td>
+                    <td className="px-3 py-2 font-mono text-[12px]">
+                      {k.roomNumber ? (
+                        <button onClick={() => onSelectKey(k.id)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                          {k.roomNumber}
+                        </button>
+                      ) : <Dash />}
+                    </td>
+                    <td className="px-3 py-2">
+                      {k.roomDescription ? (
+                        <button onClick={() => onSelectKey(k.id)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                          {k.roomDescription}
+                        </button>
+                      ) : <Dash />}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {k.building ? (
+                        onSelectBuilding ? (
+                          <button onClick={() => onSelectBuilding(k.building!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                            {k.building}
+                          </button>
+                        ) : k.building
+                      ) : <Dash />}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {k.department ? (
+                        onSelectDepartment ? (
+                          <button onClick={() => onSelectDepartment(k.department!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                            {k.department}
+                          </button>
+                        ) : k.department
+                      ) : <Dash />}
+                    </td>
                     <td className="px-3 py-2 text-[12px]" style={{ color: DSU.midGray }}>{k.notes || <Dash />}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">
                       {counts.active > 0 ? (

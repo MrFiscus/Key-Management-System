@@ -72,6 +72,7 @@ export interface RowActions {
 
 export function KeyTable({
   records, sortCol, sortDir, onSort, showPerson = false, actions, onSelectPerson, onSelectKey,
+  onSelectBuilding, onSelectDepartment,
   emptyMessage = "No matching records found.",
 }: {
   records: KeyRecord[];
@@ -82,6 +83,8 @@ export function KeyTable({
   actions?: RowActions;
   onSelectPerson?: (personId: string) => void;
   onSelectKey?: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
   emptyMessage?: string;
 }) {
   if (records.length === 0) return <EmptyState message={emptyMessage} />;
@@ -152,16 +155,48 @@ export function KeyTable({
                     )}
                   </td>
                 )}
-                <td className="px-3 py-2">{r.roomDescription || <Dash />}</td>
-                <td className="px-3 py-2 font-mono text-[12px]">{r.roomNumber || <Dash />}</td>
+                <td className="px-3 py-2">
+                  {r.roomDescription ? (
+                    onSelectKey ? (
+                      <button onClick={() => onSelectKey(r.keyId)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                        {r.roomDescription}
+                      </button>
+                    ) : r.roomDescription
+                  ) : <Dash />}
+                </td>
+                <td className="px-3 py-2 font-mono text-[12px]">
+                  {r.roomNumber ? (
+                    onSelectKey ? (
+                      <button onClick={() => onSelectKey(r.keyId)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                        {r.roomNumber}
+                      </button>
+                    ) : r.roomNumber
+                  ) : <Dash />}
+                </td>
                 <td className="px-3 py-2">
                   <Stamp
                     stamp={r.keyStamp}
                     onClick={onSelectKey ? () => onSelectKey(r.keyId) : undefined}
                   />
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.building || <Dash />}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.department || <Dash />}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {r.building ? (
+                    onSelectBuilding ? (
+                      <button onClick={() => onSelectBuilding(r.building)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                        {r.building}
+                      </button>
+                    ) : r.building
+                  ) : <Dash />}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {r.department ? (
+                    onSelectDepartment ? (
+                      <button onClick={() => onSelectDepartment(r.department)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                        {r.department}
+                      </button>
+                    ) : r.department
+                  ) : <Dash />}
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap font-mono text-[12px] tabular">{formatDate(r.dateIssued)}</td>
                 <td className="px-3 py-2 whitespace-nowrap font-mono text-[12px] tabular">
                   {r.dateReturned ? formatDate(r.dateReturned) : <Dash />}

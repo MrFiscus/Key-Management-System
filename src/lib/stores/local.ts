@@ -1,5 +1,5 @@
 import type {
-  Assignment, DataStore, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
+  Assignment, DataStore, KeyActivity, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
 import { EMPTY_MAP_LAYOUT } from "../types";
 import { newId } from "../id";
@@ -7,6 +7,8 @@ import { buildSeed } from "../seed";
 
 const STORAGE_KEY = "dsu-key-mgmt/v1";
 const MAP_KEY = "dsu-key-mgmt/map/v1";
+const ACTIVITY_KEY = "dsu-key-mgmt/key-activity/v1";
+const ACTIVITY_CAP = 200;
 
 /**
  * Browser-persisted store. Data lives in localStorage on this machine only —
@@ -23,6 +25,7 @@ export class LocalStore implements DataStore {
 
   private snap: Snapshot = { people: [], keys: [], assignments: [] };
   private loaded = false;
+  private activity: KeyActivity[] = readActivity();
 
   async load(): Promise<Snapshot> {
     if (!this.loaded) {
@@ -96,6 +99,7 @@ export class LocalStore implements DataStore {
     const key: KeyDef = { ...candidate, id: newId() };
     this.snap.keys.push(key);
     this.persist();
+    this.logActivity(key, "created");
     return { ...key };
   }
 
@@ -109,6 +113,7 @@ export class LocalStore implements DataStore {
     }
     Object.assign(key, merged);
     this.persist();
+    this.logActivity(key, "updated");
     return { ...key };
   }
 
@@ -125,16 +130,23 @@ export class LocalStore implements DataStore {
     const assignment: Assignment = { ...input, id: newId() };
     this.snap.assignments.push(assignment);
     this.persist();
+    const key = this.snap.keys.find((k) => k.id === assignment.keyId);
+    if (key) this.logActivity(key, "issued");
     return { ...assignment };
   }
 
   async updateAssignment(id: string, patch: Partial<NewAssignment>): Promise<Assignment> {
     const existing = this.snap.assignments.find((a) => a.id === id);
     if (!existing) throw new Error("Assignment not found.");
+    const wasOpen = existing.dateReturned === null;
     const merged = { ...existing, ...patch };
     this.validateAssignment(merged, id);
     Object.assign(existing, merged);
     this.persist();
+    if (wasOpen && existing.dateReturned) {
+      const key = this.snap.keys.find((k) => k.id === existing.keyId);
+      if (key) this.logActivity(key, "returned");
+    }
     return { ...existing };
   }
 
@@ -196,6 +208,23 @@ export class LocalStore implements DataStore {
   async saveMapLayout(layout: MapLayout): Promise<void> {
     localStorage.setItem(MAP_KEY, JSON.stringify(layout));
   }
+
+  // ── key activity ────────────────────────────────────────────────────────────
+  // No accounts in local mode, so there's no real "actor" to filter by — this
+  // browser's own history is the only history, and is all any actorEmail sees.
+
+  private logActivity(key: KeyDef, action: KeyActivity["action"]) {
+    this.activity.unshift({
+      id: newId(), keyId: key.id, keyStamp: key.keyStamp, action, actorEmail: null,
+      at: new Date().toISOString(),
+    });
+    this.activity = this.activity.slice(0, ACTIVITY_CAP);
+    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(this.activity));
+  }
+
+  async getRecentKeyActivity(_actorEmail: string, limit = 5): Promise<KeyActivity[]> {
+    return this.activity.slice(0, limit);
+  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -211,6 +240,15 @@ function sameKeyIdentity(a: Omit<KeyDef, "id">, b: Omit<KeyDef, "id">) {
 }
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+
+function readActivity(): KeyActivity[] {
+  try {
+    const raw = localStorage.getItem(ACTIVITY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Guard against older or hand-edited payloads missing newer fields. */
 function normalize(raw: any): Snapshot {

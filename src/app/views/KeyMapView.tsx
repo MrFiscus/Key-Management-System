@@ -76,7 +76,7 @@ function StatTile({
 function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col overflow-hidden" style={CARD}>
-      <div className="px-4 pt-4 pb-2 text-[16px] font-semibold flex items-center gap-2" style={{ color: DSU.navy, fontFamily: font.display }}>
+      <div className="px-4 pt-4 pb-2 text-[16px] font-semibold flex items-center gap-2" style={{ color: DSU.navy, fontFamily: font.sans }}>
         {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
         {title}
       </div>
@@ -206,11 +206,12 @@ function BuildingNavRow({
  * active records; clicking a building opens its key drawer.
  */
 export function KeyMapView({
-  records, onSelectKey, onSelectPerson, store, editing = false,
+  records, onSelectKey, onSelectPerson, onSelectBuilding, store, editing = false,
 }: {
   records: KeyRecord[]; // active checkouts
   onSelectKey: (id: string) => void;
   onSelectPerson: (id: string) => void;
+  onSelectBuilding?: (name: string) => void;
   /** Optional — enables the drag/resize position tool with persistence. */
   store?: DataStore | null;
   /** Controlled from the Data page's "Enable Map Editing" toggle (an admin
@@ -597,7 +598,7 @@ export function KeyMapView({
       <aside className="w-[460px] shrink-0 flex flex-col overflow-hidden" style={CARD}>
         <div
           className="px-4 pt-4 pb-2 text-[16px] font-semibold flex items-center gap-2"
-          style={{ color: DSU.navy, fontFamily: font.display }}
+          style={{ color: DSU.navy, fontFamily: font.sans }}
         >
           <span style={{ color: DSU.trojan }}><Building2 size={13} /></span>
           Navigate
@@ -627,9 +628,20 @@ export function KeyMapView({
       {/* ── Building key list drawer ── */}
       {selected && (
         <Modal title={selected.name} onClose={() => setSelectedId(null)} wide>
-          <div className="flex items-center gap-2 mb-3 text-[13px]" style={{ color: DSU.midGray }}>
-            <MapPin size={14} style={{ color: DSU.trojan }} />
-            {selectedKeys.length} key{selectedKeys.length === 1 ? "" : "s"} currently assigned here
+          <div className="flex items-center gap-3 mb-3 text-[13px] flex-wrap" style={{ color: DSU.midGray }}>
+            <span className="inline-flex items-center gap-2">
+              <MapPin size={14} style={{ color: DSU.trojan }} />
+              {selectedKeys.length} key{selectedKeys.length === 1 ? "" : "s"} currently assigned here
+            </span>
+            {onSelectBuilding && (
+              <button
+                onClick={() => { setSelectedId(null); onSelectBuilding(selected.name); }}
+                className="hover:underline font-medium"
+                style={{ color: DSU.navy }}
+              >
+                View full building page →
+              </button>
+            )}
           </div>
           {selectedKeys.length === 0 ? (
             <div className="py-8 text-center text-[13px]" style={{ color: DSU.midGray }}>

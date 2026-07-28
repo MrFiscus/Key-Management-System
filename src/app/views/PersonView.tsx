@@ -41,6 +41,7 @@ function IconBadge({ icon, bg, fg }: { icon: React.ReactNode; bg: string; fg: st
  */
 export function PersonView({
   person, records, actions, onBack, backLabel, onEdit, onDelete, onIssue, onSelectKey,
+  onSelectBuilding, onSelectDepartment,
 }: {
   person: Person;
   /** All records for this person, active and returned. */
@@ -52,6 +53,8 @@ export function PersonView({
   onDelete: () => void;
   onIssue: () => void;
   onSelectKey: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
 }) {
   const active = useMemo(
     () => records.filter((r) => r.isActive).sort((a, b) => b.dateIssued.localeCompare(a.dateIssued)),
@@ -100,9 +103,21 @@ export function PersonView({
                 {person.fullName}
               </h1>
               <div className="flex items-center gap-1 mt-1 text-[13px] flex-wrap" style={{ color: DSU.darkGray }}>
-                {person.department || "—"}
+                {person.department ? (
+                  onSelectDepartment ? (
+                    <button onClick={() => onSelectDepartment(person.department!)} className="hover:underline" style={{ font: "inherit" }}>
+                      {person.department}
+                    </button>
+                  ) : person.department
+                ) : "—"}
                 <ChevronRight size={12} style={{ color: DSU.midGray }} />
-                {person.building || "—"}
+                {person.building ? (
+                  onSelectBuilding ? (
+                    <button onClick={() => onSelectBuilding(person.building!)} className="hover:underline" style={{ font: "inherit" }}>
+                      {person.building}
+                    </button>
+                  ) : person.building
+                ) : "—"}
               </div>
               <div className="flex items-center gap-4 mt-2 text-[12px] flex-wrap" style={{ color: DSU.midGray }}>
                 {person.email && (
@@ -165,7 +180,7 @@ export function PersonView({
           {active.length === 0 ? (
             <Empty>No keys are currently checked out to {person.fullName}.</Empty>
           ) : (
-            <HistoryTable records={active} actions={actions} onSelectKey={onSelectKey} showReturned={false} />
+            <HistoryTable records={active} actions={actions} onSelectKey={onSelectKey} onSelectBuilding={onSelectBuilding} showReturned={false} />
           )}
         </Panel>
       </div>
@@ -175,7 +190,7 @@ export function PersonView({
         {returned.length === 0 ? (
           <Empty>No returned keys on record.</Empty>
         ) : (
-          <HistoryTable records={returned} actions={actions} onSelectKey={onSelectKey} showReturned />
+          <HistoryTable records={returned} actions={actions} onSelectKey={onSelectKey} onSelectBuilding={onSelectBuilding} showReturned />
         )}
       </Panel>
     </div>
@@ -216,7 +231,7 @@ function Panel({
 }) {
   return (
     <div className="overflow-hidden" style={CARD}>
-      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2 flex-wrap" style={{ color: DSU.navy, fontFamily: font.display }}>
+      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2 flex-wrap" style={{ color: DSU.navy, fontFamily: font.sans }}>
         {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
         {title}
         {count !== undefined && (
@@ -235,11 +250,12 @@ const Empty = ({ children }: { children: React.ReactNode }) => (
 );
 
 function HistoryTable({
-  records, actions, onSelectKey, showReturned,
+  records, actions, onSelectKey, onSelectBuilding, showReturned,
 }: {
   records: KeyRecord[];
   actions: RowActions;
   onSelectKey: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
   showReturned: boolean;
 }) {
   // Symmetric grid columns — same template on the header and every row.
@@ -309,10 +325,20 @@ function HistoryTable({
               </div>
 
               <div className="text-[13px] font-medium truncate min-w-0" style={{ color: DSU.darkGray }} title={room}>
-                {room}
+                {room !== "—" ? (
+                  <button onClick={() => onSelectKey(r.keyId)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                    {room}
+                  </button>
+                ) : room}
               </div>
               <div className="text-[13px] truncate min-w-0" style={{ color: DSU.darkGray }} title={r.building ?? undefined}>
-                {r.building || "—"}
+                {r.building ? (
+                  onSelectBuilding ? (
+                    <button onClick={() => onSelectBuilding(r.building)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                      {r.building}
+                    </button>
+                  ) : r.building
+                ) : "—"}
               </div>
 
               <div className="text-[11.5px] tabular truncate" style={{ color: DSU.midGray }}>

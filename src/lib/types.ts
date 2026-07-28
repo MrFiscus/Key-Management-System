@@ -121,6 +121,25 @@ export interface DataStore {
   /** Interactive key-map layout (building position overrides + lock state). */
   loadMapLayout(): Promise<MapLayout>;
   saveMapLayout(layout: MapLayout): Promise<void>;
+
+  /**
+   * Most recent key create/edit activity for one person, newest first — shown
+   * on their profile page so "who touched what" stays visible. In LocalStore
+   * (no accounts) this just returns this browser's own recent edits, ignoring
+   * the actor filter.
+   */
+  getRecentKeyActivity(actorEmail: string, limit?: number): Promise<KeyActivity[]>;
+}
+
+/** One row of the key edit history shown on a user's profile page. */
+export interface KeyActivity {
+  id: string;
+  keyId: string;
+  keyStamp: string;
+  action: "created" | "updated" | "issued" | "returned";
+  actorEmail: string | null;
+  /** ISO timestamp */
+  at: string;
 }
 
 // ── Derived helpers ───────────────────────────────────────────────────────────

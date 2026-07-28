@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { DSU, headerFill, radius, serif, shadow, surface } from "../theme";
 
 // ── Hexagon motifs ────────────────────────────────────────────────────────────
@@ -521,6 +521,49 @@ export function Toast({ message, onDone }: { message: string; onDone: () => void
       role="status"
     >
       {message}
+    </div>
+  );
+}
+
+/**
+ * The prominent, page-top search field — same visual language as the
+ * Dashboard's and the Map's search bars (outlined pill, trojan focus ring).
+ * Fully controlled and just drives that page's own live filtering (the same
+ * job the old plain "Filter…" text input did) — no suggestion dropdown here,
+ * since the filtered results already show live in the page beneath it.
+ */
+export function PageSearchBar({
+  value, onChange, placeholder = "Search…",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <div className="relative w-[280px] shrink-0">
+      <Search
+        size={14}
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: DSU.midGray }}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        aria-label="Search records"
+        autoComplete="off"
+        className="w-full pl-8 pr-3 py-1.5 text-[13px] rounded-md bg-white outline-none transition-all duration-150 hover:border-[#b9c0c7]"
+        style={{
+          border: `1px solid ${focused ? DSU.trojan : DSU.lightBorder}`,
+          boxShadow: focused ? "0 0 0 3px rgba(0,169,224,0.20)" : "none",
+          color: DSU.darkGray,
+        }}
+      />
     </div>
   );
 }

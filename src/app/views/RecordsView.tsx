@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import type { KeyRecord } from "../../lib/types";
-import { DSU } from "../theme";
-import { Button, SectionHeader, SelectInput, TextInput } from "../components/primitives";
+import { DSU, font } from "../theme";
+import { Button, PageSearchBar, SelectInput } from "../components/primitives";
 import { KeyTable, sortRecords, type RowActions, type SortCol, type SortDir } from "./KeyTable";
 
 /**
@@ -11,7 +11,8 @@ import { KeyTable, sortRecords, type RowActions, type SortCol, type SortDir } fr
  * own status filter.
  */
 export function RecordsView({
-  title, records, sortCol, sortDir, onSort, actions, onSelectPerson, onSelectKey, emptyMessage,
+  title, records, sortCol, sortDir, onSort, actions, onSelectPerson, onSelectKey,
+  onSelectBuilding, onSelectDepartment, onAddReturned, emptyMessage,
 }: {
   title: string;
   records: KeyRecord[];
@@ -21,6 +22,11 @@ export function RecordsView({
   actions: RowActions;
   onSelectPerson?: (personId: string) => void;
   onSelectKey?: (keyId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
+  /** Shows a "+ Add Returned" button, top-right — only passed on the
+   *  Returned tab, for recording a historical issuance directly. */
+  onAddReturned?: () => void;
   emptyMessage: string;
 }) {
   const [building, setBuilding] = useState("");
@@ -54,19 +60,20 @@ export function RecordsView({
 
   return (
     <div>
-      <SectionHeader title={title} count={filtered.length}>
+      <div className="flex items-center justify-between gap-3 mb-5 pb-3 border-b flex-wrap" style={{ borderColor: DSU.lightBorder }}>
+        <h1 className="text-[26px] font-semibold shrink-0" style={{ fontFamily: font.display, color: DSU.navy }}>
+          {title}
+        </h1>
+
         <div className="flex items-center gap-2 flex-wrap">
-          <TextInput
+          <PageSearchBar
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter…"
-            className="!text-[12px] !py-1"
-            aria-label="Filter records"
+            onChange={setSearch}
+            placeholder="Search by person, stamp, or room…"
           />
           <SelectInput
             value={building}
             onChange={(e) => setBuilding(e.target.value)}
-            className="!text-[12px] !py-1"
             aria-label="Building"
           >
             <option value="">All buildings</option>
@@ -75,7 +82,6 @@ export function RecordsView({
           <SelectInput
             value={dept}
             onChange={(e) => setDept(e.target.value)}
-            className="!text-[12px] !py-1"
             aria-label="Department"
           >
             <option value="">All departments</option>
@@ -89,8 +95,13 @@ export function RecordsView({
               <X size={11} /> Clear
             </Button>
           )}
+          {onAddReturned && (
+            <Button variant="primary" onClick={onAddReturned}>
+              <Plus size={12} /> Add Returned
+            </Button>
+          )}
         </div>
-      </SectionHeader>
+      </div>
 
       <KeyTable
         records={filtered}
@@ -101,6 +112,8 @@ export function RecordsView({
         actions={actions}
         onSelectPerson={onSelectPerson}
         onSelectKey={onSelectKey}
+        onSelectBuilding={onSelectBuilding}
+        onSelectDepartment={onSelectDepartment}
         emptyMessage={hasFilter ? "No records match these filters." : emptyMessage}
       />
     </div>

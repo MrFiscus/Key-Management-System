@@ -35,13 +35,15 @@ function IconBadge({ icon, bg, fg }: { icon: React.ReactNode; bg: string; fg: st
  * held by several people at once. Flagging either would train you to ignore it.
  */
 export function DashboardView({
-  snapshot, records, onSelectPerson, onSelectKey, onGoToTab, onSearch, onIssue, onReturnKeys,
+  snapshot, records, onSelectPerson, onSelectKey, onGoToTab, onOpenData, onSearch, onIssue, onReturnKeys,
 }: {
   snapshot: Snapshot;
   records: KeyRecord[];
   onSelectPerson: (id: string) => void;
   onSelectKey: (id: string) => void;
-  onGoToTab: (tab: "returned" | "keys" | "directory" | "data") => void;
+  onGoToTab: (tab: "returned" | "keys" | "directory") => void;
+  /** Data & backups now live inside Settings, not a nav tab of their own. */
+  onOpenData: () => void;
   onSearch: (query: string) => void;
   onIssue: () => void;
   onReturnKeys: () => void;
@@ -125,7 +127,7 @@ export function DashboardView({
           <h1 className="text-[26px] font-semibold" style={{ fontFamily: font.display, color: DSU.navy }}>
             Dashboard
           </h1>
-          <Button onClick={() => onGoToTab("data")} className="!rounded-full !px-4">
+          <Button onClick={onOpenData} className="!rounded-full !px-4">
             <Download size={13} /> Export
           </Button>
         </div>
@@ -137,7 +139,7 @@ export function DashboardView({
             Nothing on record yet
           </h1>
           <p className="text-[14px] mt-2" style={{ color: DSU.midGray }}>
-            <Linkish onClick={() => onGoToTab("data")}>Import your spreadsheet</Linkish> to get started.
+            <Linkish onClick={onOpenData}>Import your spreadsheet</Linkish> to get started.
           </p>
         </div>
       ) : (
@@ -168,9 +170,9 @@ export function DashboardView({
               label="Returned" value={returned.length} onClick={() => onGoToTab("returned")}
             />
 
-            {/* Real action, not decoration: goes straight to the Data tab's import flow. */}
+            {/* Real action, not decoration: goes straight to Settings' import flow. */}
             <button
-              onClick={() => onGoToTab("data")}
+              onClick={onOpenData}
               className="p-5 flex flex-col items-center justify-center gap-2 text-center transition-colors"
               style={{
                 borderRadius: 20,
@@ -206,7 +208,7 @@ export function DashboardView({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onFocus={() => setFocused(true)}
-              placeholder="Search a person or key stamp…"
+              placeholder="Search a person, key stamp, room, building, or department…"
               aria-label="Search records"
               autoComplete="off"
               className="w-full pl-12 pr-4 py-3.5 text-[15px] bg-white outline-none transition-all duration-150"
@@ -526,7 +528,7 @@ function Panel({
 }) {
   return (
     <div className="h-full flex flex-col overflow-hidden" style={CARD}>
-      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2" style={{ color: DSU.navy, fontFamily: font.display }}>
+      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2" style={{ color: DSU.navy, fontFamily: font.sans }}>
         {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
         {title}
         {total !== undefined && total > 0 && (

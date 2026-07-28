@@ -41,6 +41,7 @@ function IconBadge({ icon, bg, fg }: { icon: React.ReactNode; bg: string; fg: st
  */
 export function KeyView({
   keyDef, records, actions, onBack, backLabel, onEdit, onDelete, onIssue, onSelectPerson,
+  onSelectBuilding, onSelectDepartment,
 }: {
   keyDef: KeyDef;
   /** All records for this key, active and returned. */
@@ -52,6 +53,8 @@ export function KeyView({
   onDelete: () => void;
   onIssue: () => void;
   onSelectPerson: (personId: string) => void;
+  onSelectBuilding?: (name: string) => void;
+  onSelectDepartment?: (name: string) => void;
 }) {
   const active = useMemo(
     () => records.filter((r) => r.isActive).sort((a, b) => a.personName.localeCompare(b.personName)),
@@ -113,9 +116,22 @@ export function KeyView({
                 )}
                 <span className="inline-flex items-center gap-1">
                   <Building2 size={12} style={{ color: DSU.midGray }} />
-                  {keyDef.building || "—"}
+                  {keyDef.building ? (
+                    onSelectBuilding ? (
+                      <button onClick={() => onSelectBuilding(keyDef.building!)} className="hover:underline" style={{ font: "inherit" }}>
+                        {keyDef.building}
+                      </button>
+                    ) : keyDef.building
+                  ) : "—"}
                   {keyDef.department && (
-                    <span style={{ color: DSU.midGray }}> · {keyDef.department}</span>
+                    <span style={{ color: DSU.midGray }}>
+                      {" · "}
+                      {onSelectDepartment ? (
+                        <button onClick={() => onSelectDepartment(keyDef.department!)} className="hover:underline" style={{ font: "inherit" }}>
+                          {keyDef.department}
+                        </button>
+                      ) : keyDef.department}
+                    </span>
                   )}
                 </span>
               </div>
@@ -223,7 +239,7 @@ function Panel({
 }) {
   return (
     <div className="overflow-hidden" style={CARD}>
-      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2 flex-wrap" style={{ color: DSU.navy, fontFamily: font.display }}>
+      <div className="px-5 pt-4 pb-2 text-[18px] font-semibold flex items-center gap-2 flex-wrap" style={{ color: DSU.navy, fontFamily: font.sans }}>
         {icon && <span style={{ color: DSU.trojan }}>{icon}</span>}
         {title}
         {count !== undefined && (

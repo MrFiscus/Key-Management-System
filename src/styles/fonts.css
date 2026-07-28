@@ -3,3 +3,7 @@
    - Roboto        → web body/UI face
    - Roboto Mono   → brand-family monospace for key stamps, codes, and dates */
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500;600&display=swap');
+
+/* IBM Plex Sans — used only by the public /landing marketing page, not the
+   authenticated app. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap');

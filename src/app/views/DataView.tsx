@@ -1,12 +1,11 @@
 import { useRef, useState } from "react";
 import {
-  Download, Upload, AlertTriangle, Database, HardDrive, FileSpreadsheet, CheckCircle2,
-  MapPin, Pencil,
+  Download, Upload, AlertTriangle, Database, HardDrive, FileSpreadsheet, CheckCircle2, Lock, GitMerge, RefreshCw,
 } from "lucide-react";
 import type { DataStore, Snapshot } from "../../lib/types";
-import { buildWorkbook, downloadWorkbook, parseWorkbook, type ImportReport } from "../../lib/excel";
+import { buildWorkbook, downloadWorkbook, mergeSnapshots, parseWorkbook, type ImportReport } from "../../lib/excel";
 import { DSU, font, radius, shadow } from "../theme";
-import { Button, ErrorNote, HexWatermark, Modal, SectionHeader } from "../components/primitives";
+import { Button, ErrorNote, Field, HexWatermark, Modal, TextInput } from "../components/primitives";
 
 /**
  * Data stewardship hub: the one place records leave this browser (export) or
@@ -15,22 +14,29 @@ import { Button, ErrorNote, HexWatermark, Modal, SectionHeader } from "../compon
  * that's what should shape whether someone bothers to back up today.
  */
 export function DataView({
-  store, snapshot, onImported, onToast, mapEditing, onToggleMapEditing,
+  store, snapshot, onImported, onToast, hideMasthead = false, requireReauth = false, onReauthorize,
 }: {
   store: DataStore;
   snapshot: Snapshot;
   onImported: () => Promise<void>;
   onToast: (msg: string) => void;
-  /** Whether the Map page's drag/resize position editor is unlocked. */
-  mapEditing: boolean;
-  onToggleMapEditing: () => void;
+  /** Skip the "Data & Backups" hero banner — used when this is folded into
+   *  Settings, which already states storage mode in its own summary row. */
+  hideMasthead?: boolean;
+  /** Export holds every record in the system — gate it behind a password
+   *  re-check so a walked-away, still-logged-in session can't be used to
+   *  walk off with the whole roster. */
+  requireReauth?: boolean;
+  onReauthorize?: (password: string) => Promise<string | null>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<{ snapshot: Snapshot; report: ImportReport; name: string } | null>(null);
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [tabsHover, setTabsHover] = useState(false);
+  const [showReauth, setShowReauth] = useState(false);
 
   const exportNow = async () => {
     setBusy(true);
@@ -45,6 +51,11 @@ export function DataView({
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleExportClick = () => {
+    if (requireReauth && onReauthorize) setShowReauth(true);
+    else exportNow();
   };
 
   const pickFile = async (file: File | undefined | null) => {
@@ -65,10 +76,13 @@ export function DataView({
 
   const confirmImport = async () => {
     if (!pending) return;
-    await store.replaceAll(pending.snapshot);
+    const finalSnapshot = importMode === "merge" ? mergeSnapshots(snapshot, pending.snapshot) : pending.snapshot;
+    await store.replaceAll(finalSnapshot);
     await onImported();
     onToast(
-      `Imported ${pending.report.assignments} records, ${pending.report.people} people, ${pending.report.keys} keys.`,
+      importMode === "merge"
+        ? `Merged in ${pending.report.assignments} records, ${pending.report.people} people, ${pending.report.keys} keys.`
+        : `Imported ${pending.report.assignments} records, ${pending.report.people} people, ${pending.report.keys} keys.`,
     );
     setPending(null);
   };
@@ -80,63 +94,67 @@ export function DataView({
       {/* ── Masthead ── same treatment as the dashboard: one white surface, a
           headline figure, and the storage badge as the supporting fact —
           not a separate callout box floating underneath it. */}
-      <div
-        className="relative mb-8 -mx-4 sm:-mx-6 -mt-5"
-        style={{ background: "#ffffff", boxShadow: shadow.md, borderTop: `2px solid ${DSU.trojan}` }}
-      >
-        <HexWatermark />
-        <div className="relative px-4 sm:px-8 lg:px-12 pt-8 pb-9">
-          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
-            <div>
-              <div
-                className="text-[11px] font-semibold uppercase mb-1.5"
-                style={{ color: DSU.trojan, letterSpacing: "0.14em" }}
-              >
-                Data &amp; Backups
-              </div>
-              <div className="flex items-baseline gap-3 flex-wrap">
-                <span
-                  className="leading-none tabular"
-                  style={{ fontFamily: font.display, fontSize: "clamp(40px, 6vw, 60px)", fontWeight: 600, color: DSU.navy }}
+      {!hideMasthead && (
+        <div
+          className="relative mb-8 -mx-4 sm:-mx-6 -mt-5"
+          style={{ background: "#ffffff", boxShadow: shadow.md, borderTop: `2px solid ${DSU.trojan}` }}
+        >
+          <HexWatermark />
+          <div className="relative px-4 sm:px-8 lg:px-12 pt-8 pb-9">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+              <div>
+                <div
+                  className="text-[11px] font-semibold uppercase mb-1.5"
+                  style={{ color: DSU.trojan, letterSpacing: "0.14em" }}
                 >
-                  {snapshot.assignments.length.toLocaleString()}
-                </span>
-                <span className="text-[15px]" style={{ color: DSU.darkGray }}>
-                  key record{snapshot.assignments.length === 1 ? "" : "s"} on file, across{" "}
-                  {snapshot.people.length.toLocaleString()} people and {snapshot.keys.length.toLocaleString()} keys
-                </span>
+                  Data &amp; Backups
+                </div>
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span
+                    className="leading-none tabular"
+                    style={{ fontFamily: font.display, fontSize: "clamp(40px, 6vw, 60px)", fontWeight: 600, color: DSU.navy }}
+                  >
+                    {snapshot.assignments.length.toLocaleString()}
+                  </span>
+                  <span className="text-[15px]" style={{ color: DSU.darkGray }}>
+                    key record{snapshot.assignments.length === 1 ? "" : "s"} on file, across{" "}
+                    {snapshot.people.length.toLocaleString()} people and {snapshot.keys.length.toLocaleString()} keys
+                  </span>
+                </div>
+                <p className="text-[13px] mt-2.5 max-w-[540px] leading-relaxed" style={{ color: DSU.midGray }}>
+                  {isLocal ? (
+                    <>
+                      Everything above lives in this browser, on this computer, only — nobody else can see it, and
+                      clearing your browsing data erases it. <strong style={{ color: "#7a6318" }}>Export to Excel
+                      regularly</strong>; that file is your only backup until Supabase is connected.
+                    </>
+                  ) : (
+                    <>Everything above is saved to the shared database and visible to everyone with access.</>
+                  )}
+                </p>
               </div>
-              <p className="text-[13px] mt-2.5 max-w-[540px] leading-relaxed" style={{ color: DSU.midGray }}>
-                {isLocal ? (
-                  <>
-                    Everything above lives in this browser, on this computer, only — nobody else can see it, and
-                    clearing your browsing data erases it. <strong style={{ color: "#7a6318" }}>Export to Excel
-                    regularly</strong>; that file is your only backup until Supabase is connected.
-                  </>
-                ) : (
-                  <>Everything above is saved to the shared database and visible to everyone with access.</>
-                )}
-              </p>
-            </div>
 
-            <div
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-semibold self-start lg:self-auto"
-              style={
-                isLocal
-                  ? { background: "#fff3d4", color: "#7a6318", border: "1px solid #ecd699" }
-                  : { background: DSU.tintBg, color: DSU.tintText, border: `1px solid ${DSU.tintBorder}` }
-              }
-            >
-              {isLocal ? <HardDrive size={13} /> : <Database size={13} />}
-              {store.label}
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-semibold self-start lg:self-auto"
+                style={
+                  isLocal
+                    ? { background: "#fff3d4", color: "#7a6318", border: "1px solid #ecd699" }
+                    : { background: DSU.tintBg, color: DSU.tintText, border: `1px solid ${DSU.tintBorder}` }
+                }
+              >
+                {isLocal ? <HardDrive size={13} /> : <Database size={13} />}
+                {store.label}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {error && <ErrorNote message={error} />}
 
-      <SectionHeader title="Backup &amp; Restore" />
+      <h2 className="text-[26px] font-semibold mb-5" style={{ fontFamily: font.display, color: DSU.navy }}>
+        Backup &amp; Restore
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* ── Export ── */}
@@ -150,15 +168,12 @@ export function DataView({
             <Download size={16} style={{ color: DSU.trojan }} />
             <h3 className="text-[13px] font-semibold" style={{ color: DSU.navy }}>Export to Excel</h3>
           </div>
-          <p className="text-[12px] leading-relaxed" style={{ color: DSU.darkGray }}>
-            Downloads a workbook with three sheets, ready to hand off or archive:
-          </p>
 
           <WorkbookTabs flat={tabsHover} />
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="primary" onClick={exportNow} disabled={busy}>
-              <Download size={12} /> {busy ? "Working…" : "Export Excel"}
+            <Button variant="primary" onClick={handleExportClick} disabled={busy}>
+              {requireReauth && <Lock size={12} />} <Download size={12} /> {busy ? "Working…" : "Export Excel"}
             </Button>
           </div>
           <div className="text-[11px] flex items-center gap-1" style={{ color: DSU.midGray }}>
@@ -176,11 +191,6 @@ export function DataView({
             <Upload size={16} style={{ color: DSU.trojan }} />
             <h3 className="text-[13px] font-semibold" style={{ color: DSU.navy }}>Import from Excel</h3>
           </div>
-          <p className="text-[12px] leading-relaxed" style={{ color: DSU.darkGray }}>
-            Reads <strong>every sheet</strong> in the workbook — Directory, Facilities, Returned, and the rest —
-            matching columns by heading. Handles split First/Last name columns and a combined room column.
-            You'll see a per-sheet count before anything is saved.
-          </p>
 
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -211,36 +221,8 @@ export function DataView({
           </div>
 
           <div className="text-[11px] flex items-center gap-1" style={{ color: "#9a7d1f" }}>
-            <AlertTriangle size={11} /> Replaces all current records. Export a backup first.
+            <AlertTriangle size={11} /> Can replace or merge with current records.
           </div>
-        </div>
-      </div>
-
-      <div className="mt-8">
-        <SectionHeader title="Admin Tools" />
-        <div
-          className="bg-white border rounded p-4 flex items-center gap-4 flex-wrap"
-          style={{ borderColor: DSU.lightBorder, boxShadow: shadow.sm, borderRadius: radius.lg }}
-        >
-          <div
-            className="inline-flex items-center justify-center rounded-full shrink-0"
-            style={{ width: 34, height: 34, background: DSU.tintBg, color: DSU.trojan }}
-          >
-            <MapPin size={16} />
-          </div>
-          <div className="flex-1 min-w-[220px]">
-            <h3 className="text-[13px] font-semibold" style={{ color: DSU.navy }}>Campus Map Positions</h3>
-            <p className="text-[12px] leading-relaxed mt-0.5" style={{ color: DSU.darkGray }}>
-              Unlocks drag-and-resize editing for every building marker on the Map page.
-              Turn this on, fix any building's position there, then come back and switch it off.
-            </p>
-          </div>
-          <Button
-            variant={mapEditing ? "primary" : "secondary"}
-            onClick={onToggleMapEditing}
-          >
-            <Pencil size={12} /> {mapEditing ? "Editing On — Turn Off" : "Enable Map Editing"}
-          </Button>
         </div>
       </div>
 
@@ -249,8 +231,18 @@ export function DataView({
           name={pending.name}
           report={pending.report}
           existing={snapshot.assignments.length}
+          mode={importMode}
+          onModeChange={setImportMode}
           onConfirm={confirmImport}
           onClose={() => setPending(null)}
+        />
+      )}
+
+      {showReauth && onReauthorize && (
+        <ReauthModal
+          onReauthorize={onReauthorize}
+          onConfirmed={() => { setShowReauth(false); exportNow(); }}
+          onClose={() => setShowReauth(false)}
         />
       )}
     </div>
@@ -298,11 +290,13 @@ function WorkbookTabs({ flat }: { flat: boolean }) {
 
 /** Shows what the parser found and requires explicit confirmation to overwrite. */
 function ImportPreview({
-  name, report, existing, onConfirm, onClose,
+  name, report, existing, mode, onModeChange, onConfirm, onClose,
 }: {
   name: string;
   report: ImportReport;
   existing: number;
+  mode: "merge" | "replace";
+  onModeChange: (mode: "merge" | "replace") => void;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -328,8 +322,12 @@ function ImportPreview({
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={run} disabled={busy}>
-            {busy ? "Importing…" : `Replace all data with ${report.assignments} records`}
+          <Button variant={mode === "replace" ? "danger" : "primary"} onClick={run} disabled={busy}>
+            {busy
+              ? "Importing…"
+              : mode === "replace"
+                ? `Delete existing data & replace with ${report.assignments} records`
+                : `Merge ${report.assignments} records into current data`}
           </Button>
         </>
       }
@@ -347,16 +345,69 @@ function ImportPreview({
         <Stat label="Keys" value={report.keys} />
       </div>
 
-      {existing > 0 && (
-        <div
-          className="flex items-start gap-2 px-3 py-2 rounded border mb-3 text-[12px]"
-          style={{ background: "#fff8e6", borderColor: "#e8d59a", color: "#7a6318" }}
+      {/* ── Mode picker ── the two ways this import can land, chosen before
+          the warning below so the warning can react to what's selected. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => onModeChange("merge")}
+          className="text-left p-3 rounded-lg border-2 transition-colors"
+          style={{
+            borderColor: mode === "merge" ? DSU.trojan : DSU.lightBorder,
+            background: mode === "merge" ? "#eaf6fc" : "#fff",
+          }}
         >
-          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div className="flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: DSU.navy }}>
+            <GitMerge size={14} style={{ color: DSU.trojan }} /> Merge with current data
+          </div>
+          <p className="text-[11.5px] mt-1 leading-relaxed" style={{ color: DSU.darkGray }}>
+            Nothing existing is deleted. Matching people/keys (by name or stamp) are reused; everything else is added.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange("replace")}
+          className="text-left p-3 rounded-lg border-2 transition-colors"
+          style={{
+            borderColor: mode === "replace" ? DSU.danger : DSU.lightBorder,
+            background: mode === "replace" ? "#fdeceb" : "#fff",
+          }}
+        >
+          <div className="flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: DSU.navy }}>
+            <RefreshCw size={14} style={{ color: DSU.danger }} /> Replace all data
+          </div>
+          <p className="text-[11.5px] mt-1 leading-relaxed" style={{ color: DSU.darkGray }}>
+            Deletes every record currently stored and starts fresh with only what's in this file.
+          </p>
+        </button>
+      </div>
+
+      {mode === "replace" ? (
+        <div
+          className="flex items-start gap-3 px-4 py-3 rounded-lg mb-4"
+          style={{ background: "#fdeceb", border: `1.5px solid ${DSU.danger}` }}
+        >
+          <AlertTriangle size={22} style={{ flexShrink: 0, color: DSU.danger }} />
+          <div>
+            <div className="text-[14px] font-bold" style={{ color: DSU.danger }}>
+              This permanently deletes all {existing} existing record{existing === 1 ? "" : "s"}
+            </div>
+            <p className="text-[12.5px] mt-1 leading-relaxed" style={{ color: "#7a2620" }}>
+              Every person, key, and issuance currently on file is erased and replaced with only the{" "}
+              {report.assignments} records from this file. <strong>This cannot be undone.</strong> Export a backup
+              first if you haven't, or choose "Merge" instead to keep what's already here.
+            </p>
+          </div>
+        </div>
+      ) : existing > 0 && (
+        <div
+          className="flex items-start gap-2 px-3 py-2 rounded border mb-4 text-[12px]"
+          style={{ background: "#eaf6fc", borderColor: DSU.tintBorder, color: DSU.tintText }}
+        >
+          <GitMerge size={14} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
-            This <strong>deletes the {existing} record{existing === 1 ? "" : "s"} currently stored</strong> and
-            replaces them with the {report.assignments} above. This cannot be undone — cancel and export a
-            backup first if you haven't.
+            The {existing} record{existing === 1 ? "" : "s"} already stored are kept. Only new people, keys, and
+            issuances from this file are added.
           </span>
         </div>
       )}
@@ -411,6 +462,68 @@ function ImportPreview({
           </span>
         </Detail>
       )}
+    </Modal>
+  );
+}
+
+/**
+ * Password re-check gating export. Exporting hands over every person's name,
+ * building, and every key's location in one file — a real risk if a signed-in
+ * device is left unattended — so it asks for the password again right before
+ * the download, rather than trusting whoever is currently at the keyboard.
+ */
+function ReauthModal({
+  onReauthorize, onConfirmed, onClose,
+}: {
+  onReauthorize: (password: string) => Promise<string | null>;
+  onConfirmed: () => void;
+  onClose: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const result = await onReauthorize(password);
+    if (result) {
+      setError(result);
+      setBusy(false);
+    } else {
+      onConfirmed();
+    }
+  };
+
+  return (
+    <Modal
+      title="Confirm It's You"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={busy || !password}>
+            <Lock size={12} /> {busy ? "Checking…" : "Confirm & Export"}
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={submit}>
+        <p className="text-[13px] mb-4 leading-relaxed" style={{ color: DSU.darkGray }}>
+          Re-enter your password to confirm.
+        </p>
+        {error && <ErrorNote message={error} />}
+        <Field label="Password" required>
+          <TextInput
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+        </Field>
+      </form>
     </Modal>
   );
 }
