@@ -215,13 +215,15 @@ export class SupabaseStore implements DataStore {
   }
 
   // ── map layout ──────────────────────────────────────────────────────────────
-  // Stored as a single JSONB row (id = 1). See migration 0002_map_layout.sql.
+  // One JSONB row per organization, keyed by org_id (see migration
+  // 0005_organizations.sql). RLS means at most one row is ever visible to a
+  // given caller, so no explicit filter is needed; org_id fills in via its
+  // column default on insert.
 
   async loadMapLayout(): Promise<MapLayout> {
     const { data, error } = await this.client
       .from("map_layout")
       .select("data")
-      .eq("id", 1)
       .maybeSingle();
     if (error) throw explain(error);
     const payload = (data?.data ?? null) as Partial<MapLayout> | null;
@@ -234,7 +236,7 @@ export class SupabaseStore implements DataStore {
   async saveMapLayout(layout: MapLayout): Promise<void> {
     const { error } = await this.client
       .from("map_layout")
-      .upsert({ id: 1, data: layout, updated_at: new Date().toISOString() });
+      .upsert({ data: layout, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
     if (error) throw explain(error);
   }
 

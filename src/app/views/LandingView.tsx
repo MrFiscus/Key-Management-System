@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  Key, LogIn, ArrowRight, Map, Users, KeyRound, CornerDownLeft, Building2,
+  LogIn, ArrowRight, Map, Users, KeyRound, CornerDownLeft, Building2,
   Activity, Search, FileText, ShieldCheck, CheckCircle2, Clock, Lock, LayoutGrid,
   Mail, Quote, Facebook, Twitter,
 } from "lucide-react";
@@ -496,9 +496,9 @@ function ContactSection() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const subject = encodeURIComponent(`Facilities Key Management inquiry from ${name || "website visitor"}`);
+    const subject = encodeURIComponent(`Fipher Keys inquiry from ${name || "website visitor"}`);
     const body = encodeURIComponent(`${message}\n\nFrom: ${name}\nEmail: ${email}`);
-    window.location.href = `mailto:support@yourcampus.edu?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:support@fipherkeys.com?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -516,9 +516,9 @@ function ContactSection() {
           </p>
           <div className="flex flex-col gap-3 mt-6">
             {[
-              { icon: <Mail size={15} />, label: "support@yourcampus.edu", href: "mailto:support@yourcampus.edu" },
-              { icon: <Facebook size={15} />, label: "facebook.com/facilitieskeymgmt", href: "#" },
-              { icon: <Twitter size={15} />, label: "twitter.com/facilitieskeymgmt", href: "#" },
+              { icon: <Mail size={15} />, label: "support@fipherkeys.com", href: "mailto:support@fipherkeys.com" },
+              { icon: <Facebook size={15} />, label: "facebook.com/fipherkeys", href: "#" },
+              { icon: <Twitter size={15} />, label: "twitter.com/fipherkeys", href: "#" },
             ].map((s) => (
               <a
                 key={s.label}
@@ -556,7 +556,7 @@ function ContactSection() {
                 <span className="text-[12px] font-medium" style={{ color: DSU.darkGray }}>Email</span>
                 <input
                   required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  className={contactFieldClasses} style={contactFieldStyle} placeholder="you@campus.edu"
+                  className={contactFieldClasses} style={contactFieldStyle} placeholder="you@company.com"
                 />
               </label>
             </div>
@@ -669,16 +669,16 @@ export function LandingView() {
           <div className="relative w-full px-6 sm:px-10 lg:px-16 min-h-[52px] flex items-center gap-3 py-2 max-w-[1680px] mx-auto">
             <div className="flex items-center gap-2 flex-shrink-0">
               <div
-                className="flex items-center justify-center w-7 h-7"
-                style={{ background: DSU.trojan, borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}
+                className="flex items-center justify-center w-7 h-7 overflow-hidden flex-shrink-0"
+                style={{ background: "#fff", borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}
               >
-                <Key size={14} color="white" />
+                <img src="/logo.png" alt="" className="w-full h-full object-cover" />
               </div>
               <span
                 className="text-white text-[18px] leading-none font-semibold tracking-tight"
                 style={{ fontFamily: DISPLAY }}
               >
-                Facilities Key Management
+                Fipher Keys
               </span>
             </div>
             <div className="flex-1" />
@@ -713,7 +713,7 @@ export function LandingView() {
                 <span style={{ color: DSU.trojan, fontStyle: "italic" }}>Always accounted for.</span>
               </h1>
               <p className="text-[16px] sm:text-[18px] mt-6 max-w-[440px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                Issue, track, and recover every physical key on campus in one system.
+                Issue, track, and recover every physical key across your organization in one system.
                 No spreadsheet, no card box, no guessing.
               </p>
               <div className="flex items-center gap-3 mt-9 flex-wrap">
@@ -1022,15 +1022,15 @@ export function LandingView() {
             <div className="col-span-2 sm:col-span-1 pr-4">
               <div className="flex items-center gap-2">
                 <div
-                  className="flex items-center justify-center w-7 h-7 flex-shrink-0"
-                  style={{ background: DSU.trojan, borderRadius: radius.sm }}
+                  className="flex items-center justify-center w-7 h-7 flex-shrink-0 overflow-hidden"
+                  style={{ background: "#fff", borderRadius: radius.sm }}
                 >
-                  <Key size={14} color="white" />
+                  <img src="/logo.png" alt="" className="w-full h-full object-cover" />
                 </div>
-                <span className="text-[15px] font-semibold text-white" style={{ fontFamily: DISPLAY }}>Facilities Key Management</span>
+                <span className="text-[15px] font-semibold text-white" style={{ fontFamily: DISPLAY }}>Fipher Keys</span>
               </div>
               <p className="text-[13px] mt-3 leading-relaxed max-w-[240px]" style={{ color: "rgba(255,255,255,0.55)" }}>
-                One record for every key on campus. Who has it, where it opens, when it came back.
+                One record for every key your organization holds. Who has it, where it opens, when it came back.
               </p>
             </div>
 
@@ -1069,7 +1069,7 @@ export function LandingView() {
             className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t text-[12px]"
             style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.45)" }}
           >
-            <span>© {new Date().getFullYear()} Facilities Key Management. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} Fipher Keys. All rights reserved.</span>
             <span>Built for facilities & operations teams.</span>
           </div>
         </div>

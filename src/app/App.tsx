@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Key, X, Users, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
+  X, Users, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
   HardDrive, User as UserIcon, Settings2,
 } from "lucide-react";
 
@@ -400,14 +400,14 @@ export default function App() {
               aria-label="Go to dashboard"
               className="flex items-center gap-2 flex-shrink-0 rounded-md transition-opacity hover:opacity-90"
             >
-              <div className="flex items-center justify-center w-7 h-7" style={{ background: DSU.trojan, borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>
-                <Key size={14} color="white" />
+              <div className="flex items-center justify-center w-7 h-7 overflow-hidden flex-shrink-0" style={{ background: "#fff", borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>
+                <img src="/logo.png" alt="" className="w-full h-full object-cover" />
               </div>
               <span
                 className="hidden sm:inline text-white text-[20px] leading-none font-semibold tracking-tight"
                 style={{ fontFamily: font.display }}
               >
-                Facilities Key Management
+                Fipher Keys
               </span>
             </button>
 
