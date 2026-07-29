@@ -7,7 +7,7 @@ An internal tool for Facilities to keep track of physical keys — who's holding
 
 By default everything runs in the browser (data lives in `localStorage`), so you can try it without any setup. Point it at a Supabase project and it becomes a shared, multi-organization app with logins, access-code self-registration, and a platform admin console.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Landing page](docs/screenshots/landing.png)
 
 ## Running it
 
@@ -20,7 +20,7 @@ With no `.env` present it uses browser storage and skips the login entirely, whi
 
 ## Sample data
 
-There's a test spreadsheet at [`samples/DSU-Test-Data.xlsx`](samples/DSU-Test-Data.xlsx): 100 key checkouts spread across 60 people, using the actual DSU building names so the map has something to show. Load it from Settings → Import (or the Data page in local mode) and you'll get a populated dashboard, directory, catalog, and map to explore.
+There's a test spreadsheet at [`samples/Fipher-Keys-Test-Data.xlsx`](samples/Fipher-Keys-Test-Data.xlsx): 100 key checkouts spread across 60 people, using real campus building names so the map has something to show. Load it from Settings → Import (or the Data page in local mode) and you'll get a populated dashboard, directory, catalog, and map to explore.
 
 Importing replaces whatever's currently stored, so don't run it against real data you want to keep.
 
@@ -28,13 +28,13 @@ Importing replaces whatever's currently stored, so don't run it against real dat
 
 **Landing page.** A public marketing page at `/landing` — the pitch, a live-styled screenshot stack, a features grid, a walkthrough of the core workflows, and a contact form that routes straight into requesting an access code for your organization.
 
-![Landing page](docs/screenshots/landing.png)
+**Dashboard.** The first thing you land on after signing in. It leads with how many keys are out right now, a few supporting counts (holders, catalog size, buildings, returned — each one click-through to that page), and a search box. Issue Key and Return Key are right here, plus a two-column breakdown (by building and by department) and a recent activity feed of the latest checkouts and returns.
+
+![Dashboard](docs/screenshots/dashboard.png)
 
 **Login / registration.** A full-bleed split page: sign in on the left, a preview of the product on the right. Creating an account asks for an organization access code, so only people who've been given one can join; the copy and headline change depending on whether you're signing in or registering.
 
 ![Login page](docs/screenshots/login.png)
-
-**Dashboard.** The first thing you land on after signing in. It leads with how many keys are out right now, a few supporting counts (holders, catalog size, buildings, returned — each one click-through to that page), and a search box. Issue Key and Return Key are right here, plus a two-column breakdown (by building and by department) and a recent activity feed of the latest checkouts and returns.
 
 **Map.** The campus map with a marker on each building. Buildings that currently have keys out show a count; hovering highlights the outline, and clicking opens the list of keys assigned there. The panel on the right ranks buildings by how many keys are out — hover a row and it lights up on the map. You can pan, zoom, and search from here too, and (for admins) drag buildings into position.
 
