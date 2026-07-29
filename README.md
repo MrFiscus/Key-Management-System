@@ -1,4 +1,7 @@
-# Fipher Keys
+<div align="center">
+  <img src="public/logo.png" alt="Fipher Keys logo" width="72" height="72">
+  <h1>Fipher Keys</h1>
+</div>
 
 An internal tool for Facilities to keep track of physical keys — who's holding what, which building it belongs to, and when it went out or came back. It replaces the hand-maintained key spreadsheet with something searchable that also shows the whole campus on a map.
 
