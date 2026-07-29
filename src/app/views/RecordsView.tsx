@@ -96,7 +96,7 @@ export function RecordsView({
             </Button>
           )}
           {onAddReturned && (
-            <Button variant="primary" onClick={onAddReturned}>
+            <Button variant="primary" style={{ background: DSU.navy }} onClick={onAddReturned}>
               <Plus size={12} /> Add Returned
             </Button>
           )}

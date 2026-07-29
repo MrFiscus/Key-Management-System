@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { DSU, headerFill, radius, serif, shadow, surface } from "../theme";
 
 // ── Hexagon motifs ────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ export function Stamp({
   if (!onClick) return chip;
   return (
     <button
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={`View key ${stamp}`}
       className="group/stamp inline-flex align-middle"
     >
@@ -354,11 +354,18 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
-      {...props}
-      className={`${fieldClasses} cursor-pointer ${props.className ?? ""}`}
-      style={{ ...fieldStyle, ...props.style }}
-    />
+    <div className="relative">
+      <select
+        {...props}
+        className={`${fieldClasses} cursor-pointer appearance-none pr-7 ${props.className ?? ""}`}
+        style={{ ...fieldStyle, ...props.style }}
+      />
+      <ChevronDown
+        size={13}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: DSU.midGray }}
+      />
+    </div>
   );
 }
 
@@ -457,10 +464,12 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={`bg-white w-full outline-none my-auto dsu-pop-in ${wide ? "max-w-[880px]" : "max-w-[520px]"}`}
-        style={{ borderRadius: radius.xl, boxShadow: shadow.xl, overflow: "hidden" }}
+        style={{ borderRadius: radius.xl, boxShadow: shadow.xl }}
       >
-        <div className="relative flex items-center gap-3 px-4 py-3 overflow-hidden" style={{ background: headerFill }}>
-          <HexBg />
+        <div
+          className="relative flex items-center gap-3 px-4 py-3"
+          style={{ background: headerFill, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }}
+        >
           <h3 className="relative text-[16px] font-semibold text-white flex-1" style={{ fontFamily: serif }}>
             {title}
           </h3>
@@ -478,7 +487,12 @@ export function Modal({
         {footer && (
           <div
             className="flex items-center justify-end gap-2 px-4 py-3 border-t"
-            style={{ borderColor: DSU.lightBorder, background: "#f8fafb" }}
+            style={{
+              borderColor: DSU.lightBorder,
+              background: "#f8fafb",
+              borderBottomLeftRadius: radius.xl,
+              borderBottomRightRadius: radius.xl,
+            }}
           >
             {footer}
           </div>

@@ -8,6 +8,13 @@ export interface Person {
   employeeId: string | null;
   department: string | null;
   building: string | null;
+  /**
+   * Which of the original workbook's sheets this person's records belong to
+   * — free text so an imported sheet with an unrecognized name still
+   * round-trips, even though the UI only offers the known
+   * PERSON_CATEGORIES.
+   */
+  category: string;
 }
 
 /**
@@ -24,6 +31,24 @@ export interface KeyDef {
   department: string | null;
   notes: string | null;
 }
+
+/**
+ * The original DSU audit workbook split active records across sheets named
+ * after who manages the PEOPLE on them (Directory being the general/largest
+ * one), with a single Returned sheet catching anything closed out regardless
+ * of where the person started. This mirrors that grouping so exports can
+ * rebuild the same shape.
+ */
+export const PERSON_CATEGORIES = [
+  "Directory",
+  "Campus Watch",
+  "CommunityCenter",
+  "GA Forms",
+  "Sodexo",
+  "Facilities Department",
+] as const;
+export type PersonCategory = (typeof PERSON_CATEGORIES)[number];
+export const DEFAULT_PERSON_CATEGORY: PersonCategory = "Directory";
 
 /** One issuance of one key to one person. Open (unreturned) means they hold it. */
 export interface Assignment {
@@ -62,6 +87,7 @@ export interface KeyRecord {
   numKeys: number;
   notes: string | null;
   isActive: boolean;
+  category: string;
 }
 
 export type NewPerson = Omit<Person, "id">;
@@ -180,6 +206,7 @@ export function toRecords(snap: Snapshot): KeyRecord[] {
       numKeys: a.numKeys,
       notes: a.notes,
       isActive: a.dateReturned === null,
+      category: person.category || DEFAULT_PERSON_CATEGORY,
     });
   }
   return records;

@@ -6,19 +6,20 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-family: 'Roboto', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
   /* A single flat, slightly cool page tone. No radial gradients — surfaces
      lift off the background by elevation, not by a coloured wash. */
   background-color: #eceef1;
-  font-family: 'Roboto', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Display serif (Crimson Text) for headings and the wordmark. */
+/* Display face for headings and the wordmark — same IBM Plex Sans as the
+   landing page, weight carries the hierarchy instead of a separate serif. */
 .font-display {
-  font-family: 'Crimson Text', Georgia, serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Monospace bits (stamps, dates, figures) get Roboto Mono, keeping them in the

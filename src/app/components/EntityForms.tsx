@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Plus, Users, KeyRound, CalendarClock, FileUp } from "lucide-react";
 import type { Assignment, KeyDef, KeyRecord, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot } from "../../lib/types";
+import { PERSON_CATEGORIES, DEFAULT_PERSON_CATEGORY } from "../../lib/types";
 import { extractParsedRequests, type ParsedRequestEntry, extractReturnRequests, type ParsedReturnEntry } from "../../lib/pdfExtraction";
 import { extractTextFromPdf, type PdfProgress } from "../../lib/pdfOcr";
-import { Avatar, Button, Combobox, ErrorNote, Field, Modal, Stamp, TextInput } from "./primitives";
-import { DSU, formatDate, todayIso } from "../theme";
+import { Avatar, Button, Combobox, ErrorNote, Field, Modal, SelectInput, Stamp, TextInput } from "./primitives";
+import { DSU, formatDate, radius, todayIso } from "../theme";
+import { newId } from "../../lib/id";
 
 /**
  * Create/edit dialogs for the three entities. Each one owns its draft state and
@@ -71,7 +73,7 @@ function ExtractedTextPanel({
         type="button"
         onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2 text-[12px] font-medium hover:bg-[#f5f6f7] transition-colors"
-        style={{ color: "#004165" }}
+        style={{ color: DSU.navy }}
       >
         <span>{open ? "Hide" : "Show"} extracted text{usedOcr ? " (read via OCR)" : ""}</span>
         {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -86,7 +88,7 @@ function ExtractedTextPanel({
           )}
           <pre
             className="text-[11px] whitespace-pre-wrap max-h-52 overflow-y-auto rounded p-2 font-mono"
-            style={{ background: "#f5f6f7", color: DSU.darkGray }}
+            style={{ background: DSU.zebra, color: DSU.darkGray }}
           >
             {text}
           </pre>
@@ -101,12 +103,84 @@ function distinctStrings(vals: (string | null | undefined)[]): string[] {
   return [...new Set(vals.map((v) => (v ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
+/** Labeled card grouping one step of a longer form — an icon chip plus a
+ *  heading, the same language SettingsView's rows use, so a multi-part
+ *  dialog like Issue Key reads as a sequence of clear steps instead of one
+ *  long, undifferentiated stack of fields. */
+function FormSection({
+  icon, title, hint, dark, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint?: string;
+  /** Navy card instead of white — for the one section that should stand out
+   *  as the centerpiece of the dialog rather than read as just another row. */
+  dark?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-lg p-4"
+      style={{
+        border: dark ? `1px solid ${DSU.navyDark}` : "none",
+        background: dark ? DSU.navy : "#fff",
+        borderRadius: radius.lg,
+      }}
+    >
+      <div className="flex items-center gap-2.5 mb-3.5">
+        <span
+          className="inline-flex items-center justify-center rounded-full flex-shrink-0"
+          style={{ width: 26, height: 26, background: dark ? "rgba(255,255,255,0.15)" : DSU.tintBg, color: dark ? "#fff" : DSU.navy }}
+        >
+          {icon}
+        </span>
+        <span className="text-[13px] font-semibold" style={{ color: dark ? "#fff" : DSU.navy }}>{title}</span>
+        {hint && <span className="text-[12px] ml-auto" style={{ color: dark ? "rgba(255,255,255,0.65)" : DSU.midGray }}>{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Compact substitute for FormSection — just an icon and the field itself,
+ *  no card, no heading. For the two steps of Issue Key that don't need a
+ *  full section of their own explained: who, and whether it's already back. */
+function IconField({
+  icon, title, required, hint, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  required?: boolean;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 px-4">
+      <div className="flex items-center gap-2.5">
+        <span
+          className="inline-flex items-center justify-center rounded-full flex-shrink-0"
+          style={{ width: 26, height: 26, background: DSU.tintBg, color: DSU.navy }}
+        >
+          {icon}
+        </span>
+        <span className="text-[13px] font-semibold" style={{ color: DSU.navy }}>
+          {title}
+          {required && <span style={{ color: DSU.danger }}> *</span>}
+        </span>
+        {hint && <span className="text-[12px] ml-auto" style={{ color: DSU.midGray }}>{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /** AssignmentDialog can create new person/key inline, so it passes details along. */
 export type AssignmentInput = NewAssignment & {
   newPersonLastName?: string;
   newPersonFirstName?: string;
   newPersonBldg?: string;
   newPersonDept?: string;
+  newPersonCategory?: string;
   newKeyStamp?: string;
   newKeyRoom?: string;
 };
@@ -123,10 +197,9 @@ export function PersonDialog({
   departments?: string[];
 }) {
   const [fullName, setFullName] = useState(person?.fullName ?? "");
-  const [email, setEmail] = useState(person?.email ?? "");
-  const [employeeId, setEmployeeId] = useState(person?.employeeId ?? "");
   const [department, setDepartment] = useState(person?.department ?? "");
   const [building, setBuilding] = useState(person?.building ?? "");
+  const [category, setCategory] = useState(person?.category || DEFAULT_PERSON_CATEGORY);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -137,10 +210,11 @@ export function PersonDialog({
     try {
       await onSave({
         fullName,
-        email: blank(email),
-        employeeId: blank(employeeId),
+        email: person?.email ?? null,
+        employeeId: person?.employeeId ?? null,
         department: blank(department),
         building: blank(building),
+        category,
       });
       onClose();
     } catch (err) {
@@ -157,7 +231,7 @@ export function PersonDialog({
       footer={
         <>
           <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="person-form" variant="primary" disabled={busy}>
+          <Button type="submit" form="person-form" variant="primary" style={{ background: DSU.navy }} disabled={busy}>
             {busy ? "Saving…" : person ? "Save Changes" : "Add Person"}
           </Button>
         </>
@@ -165,25 +239,28 @@ export function PersonDialog({
     >
       {error && <ErrorNote message={error} />}
       <form id="person-form" onSubmit={submit} className="flex flex-col gap-3">
-        <Field label="Full name" required>
-          <TextInput value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus required />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Department" hint="Type to search or add a new one">
-            <Combobox value={department} onChange={setDepartment} options={departments} placeholder="e.g. Facilities" />
-          </Field>
-          <Field label="Building" hint="Type to search or add a new one">
-            <Combobox value={building} onChange={setBuilding} options={buildings} placeholder="e.g. Beadle Hall" />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Email">
-            <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </Field>
-          <Field label="Employee ID">
-            <TextInput value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} />
-          </Field>
-        </div>
+        <IconField icon={<Users size={12} />} title="Person details" required>
+          <div className="flex flex-col gap-3">
+            <Field label="Full name" required>
+              <TextInput className="w-full" value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus required />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Department">
+                <Combobox value={department} onChange={setDepartment} options={departments} placeholder="e.g. Facilities" />
+              </Field>
+              <Field label="Building">
+                <Combobox value={building} onChange={setBuilding} options={buildings} placeholder="e.g. Beadle Hall" />
+              </Field>
+            </div>
+            <Field label="Category">
+              <SelectInput className="w-full" value={category} onChange={(e) => setCategory(e.target.value)}>
+                {PERSON_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+        </IconField>
       </form>
     </Modal>
   );
@@ -192,11 +269,13 @@ export function PersonDialog({
 // ── Key ───────────────────────────────────────────────────────────────────────
 
 export function KeyDialog({
-  keyDef, onSave, onClose,
+  keyDef, onSave, onClose, buildings = [], departments = [],
 }: {
   keyDef: KeyDef | null;
   onSave: (input: NewKeyDef) => Promise<void>;
   onClose: () => void;
+  buildings?: string[];
+  departments?: string[];
 }) {
   const [keyStamp, setKeyStamp] = useState(keyDef?.keyStamp ?? "");
   const [roomNumber, setRoomNumber] = useState(keyDef?.roomNumber ?? "");
@@ -235,7 +314,7 @@ export function KeyDialog({
       footer={
         <>
           <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="key-form" variant="primary" disabled={busy}>
+          <Button type="submit" form="key-form" variant="primary" style={{ background: DSU.navy }} disabled={busy}>
             {busy ? "Saving…" : keyDef ? "Save Changes" : "Add Key"}
           </Button>
         </>
@@ -243,38 +322,187 @@ export function KeyDialog({
     >
       {error && <ErrorNote message={error} />}
       <form id="key-form" onSubmit={submit} className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Key stamp" required hint="e.g. 2A.9">
-            <TextInput value={keyStamp} onChange={(e) => setKeyStamp(e.target.value)} autoFocus required />
-          </Field>
-          <Field label="Room number">
-            <TextInput value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} />
-          </Field>
-        </div>
-        <Field label="Room description">
-          <TextInput value={roomDescription} onChange={(e) => setRoomDescription(e.target.value)} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Building">
-            <TextInput value={building} onChange={(e) => setBuilding(e.target.value)} />
-          </Field>
-          <Field label="Department">
-            <TextInput value={department} onChange={(e) => setDepartment(e.target.value)} />
-          </Field>
-        </div>
-        <Field label="Notes">
-          <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </Field>
-        <p className="text-[11px] leading-relaxed" style={{ color: "#6b6d72" }}>
-          A key stamp identifies a cut, not a single piece of metal — several people can hold copies
-          of the same stamp. Add the key once here, then issue it to each person.
-        </p>
+        <IconField icon={<KeyRound size={12} />} title="Key details" required>
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Key stamp" required hint="e.g. 2A.9">
+                <TextInput className="w-full" value={keyStamp} onChange={(e) => setKeyStamp(e.target.value)} autoFocus required />
+              </Field>
+              <Field label="Room number">
+                <TextInput value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Room description">
+              <TextInput value={roomDescription} onChange={(e) => setRoomDescription(e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Building">
+                <Combobox value={building} onChange={setBuilding} options={buildings} placeholder="e.g. Beadle Hall" />
+              </Field>
+              <Field label="Department">
+                <Combobox value={department} onChange={setDepartment} options={departments} placeholder="e.g. Facilities" />
+              </Field>
+            </div>
+            <Field label="Notes">
+              <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Field>
+          </div>
+        </IconField>
       </form>
     </Modal>
   );
 }
 
 // ── Assignment (check out / edit) ─────────────────────────────────────────────
+
+/** One row of the "issue these keys" list — a person can walk out with
+ *  several keys in the same visit, so Issue Key builds up a list of these
+ *  instead of forcing one dialog trip per key. */
+type KeyEntryState = {
+  id: string;
+  keyId: string;
+  keySearch: string;
+  showNewKey: boolean;
+  keyStampEdited: boolean;
+  newKeyStamp: string;
+  newKeyRoom: string;
+  numKeys: string;
+  dateIssued: string;
+};
+
+function makeKeyEntry(dateIssued: string): KeyEntryState {
+  return {
+    id: newId(), keyId: "", keySearch: "", showNewKey: false, keyStampEdited: false,
+    newKeyStamp: "", newKeyRoom: "", numKeys: "1", dateIssued,
+  };
+}
+
+/** One key row inside Issue Key: search-and-select an existing key, or add a
+ *  new one inline — the same pattern the person picker above it uses. */
+function KeyEntryRow({
+  entry, index, keys, onChange, onRemove, canRemove, label,
+}: {
+  entry: KeyEntryState;
+  index: number;
+  keys: KeyDef[];
+  onChange: (patch: Partial<KeyEntryState>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+  label?: string;
+}) {
+  const selectedKey = entry.keyId ? keys.find((k) => k.id === entry.keyId) : null;
+  const filteredKeys = keys.filter((k) =>
+    (k.keyStamp + (k.roomNumber ?? "") + (k.roomDescription ?? ""))
+      .toLowerCase()
+      .includes(entry.keySearch.toLowerCase()),
+  );
+  const creatingKey = !selectedKey && entry.keySearch.trim() !== "" && (filteredKeys.length === 0 || entry.showNewKey);
+
+  useEffect(() => {
+    if (!creatingKey || entry.keyStampEdited) return;
+    onChange({ newKeyStamp: entry.keySearch.trim() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creatingKey, entry.keySearch, entry.keyStampEdited]);
+
+  return (
+    <div className="rounded-lg border p-3 relative" style={{ borderColor: DSU.lightBorder, background: "#fff" }}>
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove key ${index + 1}`}
+          title="Remove this key"
+          className="absolute top-2 right-2 p-1 rounded-md hover:bg-black/[0.06]"
+          style={{ color: DSU.midGray }}
+        >
+          <X size={14} />
+        </button>
+      )}
+      <div className="grid grid-cols-3 gap-3 pr-6">
+        <div className="relative">
+          <Field label={label ?? `Key ${index + 1}`} required>
+            <TextInput
+              placeholder="Type to search…"
+              value={selectedKey ? selectedKey.keyStamp : entry.keySearch}
+              onChange={(e) => {
+                if (selectedKey) {
+                  onChange({ keySearch: "", keyId: "" });
+                } else {
+                  onChange({
+                    keySearch: e.target.value,
+                    ...(e.target.value.trim() ? {} : { showNewKey: false, keyStampEdited: false }),
+                  });
+                }
+              }}
+            />
+          </Field>
+          {!selectedKey && entry.keySearch.trim() && filteredKeys.length > 0 && !entry.showNewKey && (
+            <div
+              className="absolute left-0 right-0 top-full mt-1 rounded border bg-white overflow-y-auto z-30"
+              style={{ borderColor: DSU.lightBorder, boxShadow: "0 10px 28px -10px rgba(16,40,56,0.28)", maxHeight: 200 }}
+            >
+              {filteredKeys.slice(0, 6).map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onChange({ keyId: k.id, keySearch: "" })}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b last:border-0"
+                  style={{ borderColor: DSU.lightBorder }}
+                >
+                  {k.keyStamp}
+                  {k.roomNumber ? ` — Rm ${k.roomNumber}` : ""}
+                  {k.roomDescription ? ` (${k.roomDescription})` : ""}
+                </button>
+              ))}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onChange({ showNewKey: true })}
+                className="w-full text-left px-3 py-2 text-[12px] font-medium hover:bg-blue-50"
+                style={{ color: DSU.navy, background: DSU.zebra }}
+              >
+                + Add a new key instead
+              </button>
+            </div>
+          )}
+        </div>
+        <Field label="Date issued" required>
+          <TextInput type="date" value={entry.dateIssued} onChange={(e) => onChange({ dateIssued: e.target.value })} required />
+        </Field>
+        <Field label="# of keys">
+          <TextInput type="number" min={1} step={1} value={entry.numKeys} onChange={(e) => onChange({ numKeys: e.target.value })} />
+        </Field>
+      </div>
+
+      {creatingKey && (
+        <div className="mt-3 border-l-4 pl-3 pr-3 py-2.5 rounded-r-md" style={{ borderColor: DSU.navy, background: DSU.tintBg }}>
+          <div className="text-[12px] font-semibold mb-2" style={{ color: DSU.navy }}>New Key</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Key stamp" required>
+              <ClearableTextInput
+                placeholder="e.g. 2A.9"
+                value={entry.newKeyStamp}
+                onChange={(e) => onChange({ newKeyStamp: e.target.value, keyStampEdited: true })}
+                clearValue={() => onChange({ newKeyStamp: "", keyStampEdited: true })}
+                clearLabel="Clear key stamp"
+              />
+            </Field>
+            <Field label="Room Number/Description">
+              <ClearableTextInput
+                placeholder="e.g. 320 - Office"
+                value={entry.newKeyRoom}
+                onChange={(e) => onChange({ newKeyRoom: e.target.value })}
+                clearValue={() => onChange({ newKeyRoom: "" })}
+                clearLabel="Clear room"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AssignmentDialog({
   assignment, snapshot, defaultPersonId, defaultKeyId, defaultReturned, onSave, onClose,
@@ -295,20 +523,40 @@ export function AssignmentDialog({
   const [newPersonFirstName, setNewPersonFirstName] = useState("");
   const [newPersonBldg, setNewPersonBldg] = useState("");
   const [newPersonDept, setNewPersonDept] = useState("");
+  const [newPersonCategory, setNewPersonCategory] = useState(DEFAULT_PERSON_CATEGORY as string);
 
-  const [keyId, setKeyId] = useState(assignment?.keyId ?? defaultKeyId ?? "");
-  const [keySearch, setKeySearch] = useState("");
-  const [newKeyStamp, setNewKeyStamp] = useState("");
-  const [newKeyRoom, setNewKeyRoom] = useState("");
   const [showNewPerson, setShowNewPerson] = useState(false);
-  const [showNewKey, setShowNewKey] = useState(false);
   const [personNameEdited, setPersonNameEdited] = useState(false);
-  const [keyStampEdited, setKeyStampEdited] = useState(false);
 
   const [dateIssued, setDateIssued] = useState(assignment?.dateIssued ?? todayIso());
   const [dateReturned, setDateReturned] = useState(assignment?.dateReturned ?? (defaultReturned ? todayIso() : ""));
-  const [numKeys, setNumKeys] = useState(String(assignment?.numKeys ?? 1));
-  const [notes, setNotes] = useState(assignment?.notes ?? "");
+  // One row per key being issued in this visit. Editing an existing
+  // assignment always has exactly one — there's nothing to add or remove.
+  const [keyEntries, setKeyEntries] = useState<KeyEntryState[]>(() => [{
+    id: newId(),
+    keyId: assignment?.keyId ?? defaultKeyId ?? "",
+    keySearch: "",
+    showNewKey: false,
+    keyStampEdited: false,
+    newKeyStamp: "",
+    newKeyRoom: "",
+    numKeys: String(assignment?.numKeys ?? 1),
+    dateIssued: assignment?.dateIssued ?? todayIso(),
+  }]);
+  const patchKeyEntry = (index: number, patch: Partial<KeyEntryState>) => {
+    setKeyEntries((es) => es.map((e, i) => (i === index ? { ...e, ...patch } : e)));
+  };
+  const addKeyEntry = () => setKeyEntries((es) => [...es, makeKeyEntry(dateIssued)]);
+  const removeKeyEntry = (index: number) => setKeyEntries((es) => es.filter((_, i) => i !== index));
+
+  // Single vs. multiple keys is an explicit choice, not just "keep clicking
+  // Add" — switching back to Single collapses the list down to the first row.
+  const [multiMode, setMultiMode] = useState(false);
+  const switchMode = (next: boolean) => {
+    setMultiMode(next);
+    if (!next) setKeyEntries((es) => es.slice(0, 1));
+  };
+
   const [parsedRequests, setParsedRequests] = useState<ParsedRequestEntry[]>([]);
   const [reviewingPdf, setReviewingPdf] = useState(false);
   const [extractingPdf, setExtractingPdf] = useState(false);
@@ -335,14 +583,8 @@ export function AssignmentDialog({
   const filteredPeople = people.filter((p) =>
     p.fullName.toLowerCase().includes(personSearch.toLowerCase()),
   );
-  const filteredKeys = keys.filter((k) =>
-    (k.keyStamp + (k.roomNumber ?? "") + (k.roomDescription ?? ""))
-      .toLowerCase()
-      .includes(keySearch.toLowerCase()),
-  );
 
   const selectedPerson = personId ? people.find((p) => p.id === personId) : null;
-  const selectedKey = keyId ? keys.find((k) => k.id === keyId) : null;
 
   // Are we in "add a new person" mode?
   const creatingPerson =
@@ -370,23 +612,7 @@ export function AssignmentDialog({
     setNewPersonLastName("");
     setNewPersonBldg("");
     setNewPersonDept("");
-  };
-
-  // Are we in "add a new key" mode? Prefill the stamp from what was typed.
-  const creatingKey =
-    !selectedKey && keySearch.trim() !== "" && (filteredKeys.length === 0 || showNewKey);
-
-  useEffect(() => {
-    if (!creatingKey || keyStampEdited) return;
-    setNewKeyStamp(keySearch.trim());
-  }, [creatingKey, keySearch, keyStampEdited]);
-
-  const cancelNewKey = () => {
-    setKeySearch("");
-    setShowNewKey(false);
-    setKeyStampEdited(false);
-    setNewKeyStamp("");
-    setNewKeyRoom("");
+    setNewPersonCategory(DEFAULT_PERSON_CATEGORY);
   };
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -418,29 +644,6 @@ export function AssignmentDialog({
       setUploadedPdfName(file.name);
       setParsedRequests(parsed);
       setReviewingPdf(true);
-
-      if (parsed.length === 1) {
-        const first = parsed[0];
-        const nameParts = first.personName.trim().split(/\s+/).filter(Boolean);
-        const firstName = nameParts.slice(0, -1).join(" ");
-        const lastName = nameParts[nameParts.length - 1] ?? "";
-        if (first.personName) {
-          setPersonSearch(first.personName);
-          setShowNewPerson(true);
-          setPersonNameEdited(true);
-          setNewPersonFirstName(firstName);
-          setNewPersonLastName(lastName);
-        }
-        if (first.keyStamp) {
-          setKeySearch(first.keyStamp);
-          setShowNewKey(true);
-          setKeyStampEdited(true);
-          setNewKeyStamp(first.keyStamp);
-        }
-        if (first.roomDescription) setNewKeyRoom(first.roomDescription);
-        if (first.dateIssued) setDateIssued(first.dateIssued);
-        if (first.notes) setNotes(first.notes);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "The PDF could not be read.");
     } finally {
@@ -483,8 +686,7 @@ export function AssignmentDialog({
           keyId,
           dateIssued: entry.dateIssued || dateIssued,
           dateReturned: dateReturned || null,
-          numKeys: Number(numKeys) || 1,
-          notes: blank(entry.notes || notes),
+          numKeys: 1,
         };
 
         if (personId === "new-person") {
@@ -492,6 +694,7 @@ export function AssignmentDialog({
           input.newPersonFirstName = firstName;
           input.newPersonBldg = entry.building.trim() || undefined;
           input.newPersonDept = entry.department.trim() || undefined;
+          input.newPersonCategory = newPersonCategory;
         }
         if (keyId === "new-key") {
           input.newKeyStamp = entry.keyStamp.trim();
@@ -528,37 +731,43 @@ export function AssignmentDialog({
       return;
     }
 
-    // Either an existing key OR new key details
-    const hasExistingKey = !!keyId;
-    const hasNewKey = newKeyStamp.trim() !== "";
-    if (!hasExistingKey && !hasNewKey) {
-      setError("Select an existing key or enter a new key stamp");
+    // Every row needs an existing key OR new key details.
+    const invalidEntry = keyEntries.some((k) => !k.keyId && !k.newKeyStamp.trim());
+    if (invalidEntry) {
+      setError("Select an existing key or enter a new key stamp for every row.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const effectivePersonId = hasExistingPerson ? personId : "new-person";
-      const effectiveKeyId = hasExistingKey ? keyId : "new-key";
-      const input: AssignmentInput = {
-        personId: effectivePersonId,
-        keyId: effectiveKeyId,
-        dateIssued,
-        dateReturned: dateReturned || null,
-        numKeys: Number(numKeys) || 1,
-        notes: blank(notes),
-      };
-      if (!hasExistingPerson) {
-        input.newPersonLastName = newPersonLastName.trim();
-        input.newPersonFirstName = newPersonFirstName.trim();
-        input.newPersonBldg = newPersonBldg.trim() || undefined;
-        input.newPersonDept = newPersonDept.trim() || undefined;
+      // A new person is only created once, even though they may be walking
+      // out with several keys in this same submission — every entry after
+      // the first reuses the id the first save just created.
+      let resolvedPersonId = hasExistingPerson ? personId : "new-person";
+
+      for (const entry of keyEntries) {
+        const effectiveKeyId = entry.keyId || "new-key";
+        const input: AssignmentInput = {
+          personId: resolvedPersonId,
+          keyId: effectiveKeyId,
+          dateIssued: entry.dateIssued,
+          dateReturned: dateReturned || null,
+          numKeys: Number(entry.numKeys) || 1,
+        };
+        if (resolvedPersonId === "new-person") {
+          input.newPersonLastName = newPersonLastName.trim();
+          input.newPersonFirstName = newPersonFirstName.trim();
+          input.newPersonBldg = newPersonBldg.trim() || undefined;
+          input.newPersonDept = newPersonDept.trim() || undefined;
+          input.newPersonCategory = newPersonCategory;
+        }
+        if (effectiveKeyId === "new-key") {
+          input.newKeyStamp = entry.newKeyStamp.trim();
+          input.newKeyRoom = entry.newKeyRoom.trim() || undefined;
+        }
+        const result = await onSave(input);
+        if (resolvedPersonId === "new-person" && result?.personId) resolvedPersonId = result.personId;
       }
-      if (!hasExistingKey) {
-        input.newKeyStamp = newKeyStamp.trim();
-        input.newKeyRoom = newKeyRoom.trim() || undefined;
-      }
-      await onSave(input);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -578,22 +787,32 @@ export function AssignmentDialog({
           <Button
             type="submit"
             form="assignment-form"
-            variant="primary"
-            disabled={busy || (reviewingPdf ? parsedRequests.length === 0 : ((!personId && (!newPersonFirstName.trim() || !newPersonLastName.trim())) || (!keyId && !newKeyStamp.trim())))}
+            variant={defaultReturned ? "dangerSolid" : "primary"}
+            style={defaultReturned ? undefined : { background: DSU.navy }}
+            disabled={busy || (reviewingPdf
+              ? parsedRequests.length === 0
+              : ((!personId && (!newPersonFirstName.trim() || !newPersonLastName.trim()))
+                || keyEntries.some((k) => !k.keyId && !k.newKeyStamp.trim())))}
           >
-            {busy ? "Saving…" : assignment ? "Save Changes" : defaultReturned ? "Add Returned Record" : "Issue Key"}
+            {busy
+              ? "Saving…"
+              : assignment
+                ? "Save Changes"
+                : defaultReturned
+                  ? "Add Returned Record"
+                  : keyEntries.length > 1 ? `Issue ${keyEntries.length} Keys` : "Issue Key"}
           </Button>
         </>
       }
     >
       {error && <ErrorNote message={error} />}
-      <form id="assignment-form" onSubmit={submit} className="flex flex-col gap-4">
+      <form id="assignment-form" onSubmit={submit} className="flex flex-col gap-5">
         {!reviewingPdf && (
           <>
-            {/* Person Selection */}
-            <div className="relative">
-              <Field label="Person" required>
+            <IconField icon={<Users size={12} />} title="Person" required>
+              <div className="relative">
                 <TextInput
+                  className="w-full"
                   placeholder="Type to search…"
                   value={selectedPerson ? `${selectedPerson.fullName}` : personSearch}
                   onChange={(e) => {
@@ -607,207 +826,179 @@ export function AssignmentDialog({
                   }}
                   autoFocus
                 />
-              </Field>
-              {/* Suggestions float over the form so the dialog height never jumps. */}
-              {!selectedPerson && personSearch.trim() && filteredPeople.length > 0 && !showNewPerson && (
-                <div
-                  className="absolute left-0 right-0 top-full mt-1 rounded border bg-white overflow-y-auto z-30"
-                  style={{ borderColor: "#dcdfe3", boxShadow: "0 10px 28px -10px rgba(16,40,56,0.28)", maxHeight: 240 }}
-                >
-                  {filteredPeople.slice(0, 6).map((p) => (
+                {/* Suggestions float over the form so the dialog height never jumps. */}
+                {!selectedPerson && personSearch.trim() && filteredPeople.length > 0 && !showNewPerson && (
+                  <div
+                    className="absolute left-0 right-0 top-full mt-1 rounded border bg-white overflow-y-auto z-30"
+                    style={{ borderColor: DSU.lightBorder, boxShadow: "0 10px 28px -10px rgba(16,40,56,0.28)", maxHeight: 240 }}
+                  >
+                    {filteredPeople.slice(0, 6).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setPersonId(p.id); setPersonSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b border-[#eef1f3] last:border-0"
+                      >
+                        {p.fullName}{p.department ? ` — ${p.department}` : ""}
+                      </button>
+                    ))}
                     <button
-                      key={p.id}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setPersonId(p.id); setPersonSearch(""); }}
-                      className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b border-[#eef1f3] last:border-0"
+                      onClick={() => setShowNewPerson(true)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium hover:bg-blue-50"
+                      style={{ color: DSU.navy, background: DSU.zebra }}
                     >
-                      {p.fullName}{p.department ? ` — ${p.department}` : ""}
+                      + Add a new person instead
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setShowNewPerson(true)}
-                    className="w-full text-left px-3 py-2 text-[12px] font-medium hover:bg-blue-50"
-                    style={{ color: "#004165", background: "#f5f6f7" }}
-                  >
-                    + Add a new person instead
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* New person form: only when there's no match, or the user chose to add one. */}
-            {creatingPerson && (
-              <div className="border-l-4 pl-3 pr-3 py-2.5" style={{ borderColor: DSU.trojan, background: "#e9f4fb" }}>
-                <div className="text-[12px] font-semibold mb-2" style={{ color: "#004165" }}>New Person</div>
-                <div className="flex items-end gap-2">
-                  <div className="grid grid-cols-4 gap-2 flex-1">
-                    <Field label="LastName" required>
-                      <ClearableTextInput
-                        placeholder="e.g. Doe"
-                        value={newPersonLastName}
-                        onChange={(e) => { setNewPersonLastName(e.target.value); setPersonNameEdited(true); }}
-                        clearValue={() => { setNewPersonLastName(""); setPersonNameEdited(true); }}
-                        clearLabel="Clear last name"
-                      />
-                    </Field>
-                    <Field label="FirstName" required>
-                      <ClearableTextInput
-                        placeholder="e.g. John"
-                        value={newPersonFirstName}
-                        onChange={(e) => { setNewPersonFirstName(e.target.value); setPersonNameEdited(true); }}
-                        clearValue={() => { setNewPersonFirstName(""); setPersonNameEdited(true); }}
-                        clearLabel="Clear first name"
-                      />
-                    </Field>
-                    <Field label="Building">
-                      <Combobox value={newPersonBldg} onChange={setNewPersonBldg} options={buildingOptions} placeholder="e.g. Beadle Hall" />
-                    </Field>
-                    <Field label="Department">
-                      <Combobox value={newPersonDept} onChange={setNewPersonDept} options={departmentOptions} placeholder="e.g. Facilities" />
-                    </Field>
                   </div>
-                  <button
-                    type="button"
-                    onClick={cancelNewPerson}
-                    aria-label="Cancel new person"
-                    title="Cancel"
-                    className="shrink-0 p-1.5 rounded-md border bg-white hover:bg-red-50 transition-colors mb-[1px]"
-                    style={{ borderColor: DSU.lightBorder, color: DSU.danger }}
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
+                )}
               </div>
-            )}
 
-            {/* Key Selection */}
-            <div className="relative">
-              <Field label="Key" required>
-                <TextInput
-                  placeholder="Type to search…"
-                  value={selectedKey ? `${selectedKey.keyStamp}` : keySearch}
-                  onChange={(e) => {
-                    if (selectedKey) {
-                      setKeySearch("");
-                      setKeyId("");
-                    } else {
-                      setKeySearch(e.target.value);
-                      if (!e.target.value.trim()) { setShowNewKey(false); setKeyStampEdited(false); }
-                    }
-                  }}
-                />
-              </Field>
-              {!selectedKey && keySearch.trim() && filteredKeys.length > 0 && !showNewKey && (
-                <div
-                  className="absolute left-0 right-0 top-full mt-1 rounded border bg-white overflow-y-auto z-30"
-                  style={{ borderColor: "#dcdfe3", boxShadow: "0 10px 28px -10px rgba(16,40,56,0.28)", maxHeight: 240 }}
-                >
-                  {filteredKeys.slice(0, 6).map((k) => (
+              {/* New person form: only when there's no match, or the user chose to add one. */}
+              {creatingPerson && (
+                <div className="mt-3 border-l-4 pl-3 pr-3 py-2.5 rounded-r-md" style={{ borderColor: DSU.navy, background: DSU.tintBg }}>
+                  <div className="text-[12px] font-semibold mb-2" style={{ color: DSU.navy }}>New Person</div>
+                  <div className="flex items-end gap-2">
+                    <div className="grid grid-cols-5 gap-2 flex-1">
+                      <Field label="LastName" required>
+                        <ClearableTextInput
+                          placeholder="e.g. Doe"
+                          value={newPersonLastName}
+                          onChange={(e) => { setNewPersonLastName(e.target.value); setPersonNameEdited(true); }}
+                          clearValue={() => { setNewPersonLastName(""); setPersonNameEdited(true); }}
+                          clearLabel="Clear last name"
+                        />
+                      </Field>
+                      <Field label="FirstName" required>
+                        <ClearableTextInput
+                          placeholder="e.g. John"
+                          value={newPersonFirstName}
+                          onChange={(e) => { setNewPersonFirstName(e.target.value); setPersonNameEdited(true); }}
+                          clearValue={() => { setNewPersonFirstName(""); setPersonNameEdited(true); }}
+                          clearLabel="Clear first name"
+                        />
+                      </Field>
+                      <Field label="Building">
+                        <Combobox value={newPersonBldg} onChange={setNewPersonBldg} options={buildingOptions} placeholder="e.g. Beadle Hall" />
+                      </Field>
+                      <Field label="Department">
+                        <Combobox value={newPersonDept} onChange={setNewPersonDept} options={departmentOptions} placeholder="e.g. Facilities" />
+                      </Field>
+                      <Field label="Category">
+                        <SelectInput className="w-full" value={newPersonCategory} onChange={(e) => setNewPersonCategory(e.target.value)}>
+                          {PERSON_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                    </div>
                     <button
-                      key={k.id}
                       type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setKeyId(k.id); setKeySearch(""); }}
-                      className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 border-b border-[#eef1f3] last:border-0"
+                      onClick={cancelNewPerson}
+                      aria-label="Cancel new person"
+                      title="Cancel"
+                      className="shrink-0 p-1.5 rounded-md border bg-white hover:bg-red-50 transition-colors mb-[1px]"
+                      style={{ borderColor: DSU.lightBorder, color: DSU.danger }}
                     >
-                      {k.keyStamp}
-                      {k.roomNumber ? ` — Rm ${k.roomNumber}` : ""}
-                      {k.roomDescription ? ` (${k.roomDescription})` : ""}
+                      <X size={15} />
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setShowNewKey(true)}
-                    className="w-full text-left px-3 py-2 text-[12px] font-medium hover:bg-blue-50"
-                    style={{ color: "#004165", background: "#f5f6f7" }}
-                  >
-                    + Add a new key instead
-                  </button>
+                  </div>
                 </div>
               )}
-            </div>
+            </IconField>
 
-            {/* New key form: only when there's no match, or the user chose to add one. */}
-            {creatingKey && (
-              <div className="border-l-4 pl-3 pr-3 py-2.5" style={{ borderColor: DSU.trojan, background: "#e9f4fb" }}>
-                <div className="text-[12px] font-semibold mb-2" style={{ color: "#004165" }}>New Key</div>
-                <div className="flex items-end gap-2">
-                  <div className="grid grid-cols-2 gap-2 flex-1">
-                    <Field label="Key stamp" required>
-                      <ClearableTextInput
-                        placeholder="e.g. 2A.9"
-                        value={newKeyStamp}
-                        onChange={(e) => { setNewKeyStamp(e.target.value); setKeyStampEdited(true); }}
-                        clearValue={() => { setNewKeyStamp(""); setKeyStampEdited(true); }}
-                        clearLabel="Clear key stamp"
-                      />
-                    </Field>
-                    <Field label="Room Number/Description">
-                      <ClearableTextInput
-                        placeholder="e.g. 320 - Office"
-                        value={newKeyRoom}
-                        onChange={(e) => setNewKeyRoom(e.target.value)}
-                        clearValue={() => setNewKeyRoom("")}
-                        clearLabel="Clear room"
-                      />
-                    </Field>
+            {/* Single Key/Multiple Keys is an explicit switch, not just
+                "keep clicking Add"; editing an existing assignment skips the
+                switch entirely and stays a fixed single row. */}
+            <FormSection icon={<KeyRound size={13} />} title="Which key(s)?">
+              <div className="flex flex-col gap-2.5">
+                {!assignment && (
+                  <div className="inline-flex self-start rounded-lg border overflow-hidden mb-0.5" style={{ borderColor: DSU.lightBorder }}>
+                    <button
+                      type="button"
+                      onClick={() => switchMode(false)}
+                      className="px-3.5 py-1.5 text-[12.5px] font-medium transition-colors"
+                      style={{ background: !multiMode ? DSU.navy : "#fff", color: !multiMode ? "#fff" : DSU.midGray }}
+                    >
+                      Single Key
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchMode(true)}
+                      className="px-3.5 py-1.5 text-[12.5px] font-medium transition-colors border-l"
+                      style={{ borderColor: DSU.lightBorder, background: multiMode ? DSU.navy : "#fff", color: multiMode ? "#fff" : DSU.midGray }}
+                    >
+                      Multiple Keys
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={cancelNewKey}
-                    aria-label="Cancel new key"
-                    title="Cancel"
-                    className="shrink-0 p-1.5 rounded-md border bg-white hover:bg-red-50 transition-colors mb-[1px]"
-                    style={{ borderColor: DSU.lightBorder, color: DSU.danger }}
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
+                )}
+
+                {multiMode ? (
+                  <>
+                    {keyEntries.map((entry, index) => (
+                      <KeyEntryRow
+                        key={entry.id}
+                        entry={entry}
+                        index={index}
+                        keys={keys}
+                        onChange={(patch) => patchKeyEntry(index, patch)}
+                        onRemove={() => removeKeyEntry(index)}
+                        canRemove={keyEntries.length > 1}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addKeyEntry}
+                      className="self-start inline-flex items-center gap-1.5 text-[12.5px] font-medium px-2.5 py-1.5 rounded-md transition-colors hover:bg-black/[0.04]"
+                      style={{ color: DSU.navy }}
+                    >
+                      <Plus size={13} /> Add another key
+                    </button>
+                  </>
+                ) : (
+                  <KeyEntryRow
+                    entry={keyEntries[0]}
+                    index={0}
+                    label="Key"
+                    keys={keys}
+                    onChange={(patch) => patchKeyEntry(0, patch)}
+                    onRemove={() => {}}
+                    canRemove={false}
+                  />
+                )}
               </div>
-            )}
+            </FormSection>
 
-            {/* Assignment Details */}
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Date issued" required>
-                <TextInput type="date" value={dateIssued} onChange={(e) => setDateIssued(e.target.value)} required />
-              </Field>
-              <Field label="Date returned" hint="Leave blank if still out">
-                <TextInput type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} />
-              </Field>
-              <Field label="# of keys">
-                <TextInput
-                  type="number" min={1} step={1}
-                  value={numKeys}
-                  onChange={(e) => setNumKeys(e.target.value)}
-                />
-              </Field>
-            </div>
-
-            <Field label="Notes">
-              <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </Field>
+            <IconField
+              icon={<CalendarClock size={12} />}
+              title="Date returned"
+              required={defaultReturned}
+              hint={defaultReturned ? undefined : "Leave blank if still out"}
+            >
+              <TextInput className="w-full" type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} required={defaultReturned} />
+            </IconField>
           </>
         )}
 
-        <div className="rounded-md border border-dashed p-3" style={{ borderColor: DSU.lightBorder, background: "#f9fafb" }}>
-          <div className="text-[12px] font-semibold mb-2" style={{ color: "#004165" }}>
-            Upload request form PDF
-          </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium transition-colors hover:bg-blue-50" style={{ borderColor: DSU.lightBorder, color: "#004165" }}>
+        <FormSection
+          icon={<FileUp size={13} />}
+          title={defaultReturned ? "Or upload a return form" : "Or upload a request form"}
+          hint="PDF"
+          dark
+        >
+          <label
+            className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3.5 py-2 text-[13px] font-medium transition-colors hover:bg-white/10"
+            style={{ borderColor: "rgba(255,255,255,0.25)", color: "#fff" }}
+          >
             <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
+            <FileUp size={14} />
             {extractingPdf
               ? (ocrProgress ? `OCR page ${ocrProgress.page}/${ocrProgress.totalPages} — ${ocrProgress.status}` : "Reading PDF…")
               : uploadedPdfName ? `Re-upload PDF (${uploadedPdfName})` : "Choose PDF"}
           </label>
-          <p className="mt-2 text-[11px]" style={{ color: DSU.midGray }}>
-            Upload a request form and we'll read the person/key details from it. Multiple entries in one form will be reviewed before saving.
-            {extractingPdf && ocrProgress && " Scanned/handwritten forms are read with OCR, which takes longer and can misread handwriting — check the review step carefully."}
-          </p>
-        </div>
+        </FormSection>
 
         <ExtractedTextPanel
           text={rawExtractedText}
@@ -817,9 +1008,9 @@ export function AssignmentDialog({
         />
 
         {reviewingPdf && parsedRequests.length > 0 && (
-          <div className="rounded-md border p-3" style={{ borderColor: DSU.lightBorder, background: "#f8fbfd" }}>
+          <div className="rounded-md border p-3" style={{ borderColor: DSU.lightBorder, background: DSU.zebra }}>
             <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="text-[12px] font-semibold" style={{ color: "#004165" }}>
+              <div className="text-[12px] font-semibold" style={{ color: DSU.navy }}>
                 Review extracted requests
               </div>
               <Button type="button" onClick={applyParsedRequests} disabled={busy}>
@@ -828,7 +1019,7 @@ export function AssignmentDialog({
             </div>
 
             {/* Person Info Section */}
-            <div className="rounded-md border bg-white p-3 mb-3" style={{ borderColor: "#e5e7eb" }}>
+            <div className="rounded-md border bg-white p-3 mb-3" style={{ borderColor: DSU.lightBorder }}>
               <div className="text-[11px] font-semibold uppercase mb-2.5" style={{ color: DSU.midGray }}>
                 Person
               </div>
@@ -882,7 +1073,7 @@ export function AssignmentDialog({
             </div>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {parsedRequests.map((entry, index) => (
-                <div key={entry.id} className="rounded-md border bg-white p-2.5" style={{ borderColor: "#e5e7eb" }}>
+                <div key={entry.id} className="rounded-md border bg-white p-2.5" style={{ borderColor: DSU.lightBorder }}>
                   <div className="grid grid-cols-3 gap-2">
                     <Field label="Key Stamp">
                       <TextInput
@@ -933,11 +1124,15 @@ export function AssignmentDialog({
  * stamp, or room so you can find the exact card to close out.
  */
 export function ReturnDialog({
-  records, onReturn, onClose,
+  records, onReturn, onClose, onAddUntracked,
 }: {
   records: KeyRecord[]; // active checkouts only
   onReturn: (assignmentId: string, dateReturned: string) => Promise<void>;
   onClose: () => void;
+  /** A key coming back that was never properly issued in the system — hands
+   *  off to Issue Key's own "Add Returned Record" mode, which already knows
+   *  how to create a new person/key and back-date the whole record. */
+  onAddUntracked?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<KeyRecord | null>(null);
@@ -1070,84 +1265,94 @@ export function ReturnDialog({
       }
     >
       {error && <ErrorNote message={error} />}
-      <form id="return-form" onSubmit={submit} className="flex flex-col gap-4">
-        {selected ? (
-          <div
-            className="flex items-center gap-3 px-3 py-2.5 rounded"
-            style={{ background: "#f5f8fa", border: `1px solid ${DSU.lightBorder}` }}
-          >
-            <Avatar initials={selected.initials} size={34} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-medium" style={{ color: DSU.navy }}>{selected.personName}</div>
-              <div className="flex items-center gap-2 text-[12px] mt-0.5" style={{ color: DSU.midGray }}>
-                <Stamp stamp={selected.keyStamp} />
-                <span className="truncate">{selected.roomDescription || selected.roomNumber || "—"}</span>
-                <span>· issued {formatDate(selected.dateIssued) ?? "—"}</span>
+      <form id="return-form" onSubmit={submit} className="flex flex-col gap-5">
+        <IconField icon={<KeyRound size={12} />} title="Key to return" required>
+          {selected ? (
+            <div
+              className="flex items-center gap-3 px-3 py-2.5 rounded-md"
+              style={{ background: DSU.zebra, border: `1px solid ${DSU.lightBorder}` }}
+            >
+              <Avatar initials={selected.initials} size={34} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-medium" style={{ color: DSU.navy }}>{selected.personName}</div>
+                <div className="flex items-center gap-2 text-[12px] mt-0.5" style={{ color: DSU.midGray }}>
+                  <Stamp stamp={selected.keyStamp} />
+                  <span className="truncate">{selected.roomDescription || selected.roomNumber || "—"}</span>
+                  <span>· issued {formatDate(selected.dateIssued) ?? "—"}</span>
+                </div>
               </div>
+              <Button type="button" onClick={() => { setSelected(null); setSearch(""); }}>Change</Button>
             </div>
-            <Button type="button" onClick={() => { setSelected(null); setSearch(""); }}>Change</Button>
-          </div>
-        ) : (
-          <div>
-            <Field label="Find the outstanding key" required>
+          ) : (
+            <div className="relative">
               <TextInput
+                className="w-full"
                 placeholder="Search person, stamp, or room…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
-            </Field>
-            {search && (
-              <div
-                className="border rounded mt-1 bg-white overflow-hidden"
-                style={{ borderColor: DSU.lightBorder, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}
-              >
-                {filtered.length === 0 ? (
-                  <div className="px-3 py-2 text-[12px]" style={{ color: DSU.midGray }}>
-                    No outstanding key matches that.
-                  </div>
-                ) : (
-                  filtered.map((r) => (
-                    <button
-                      key={r.assignmentId}
-                      type="button"
-                      onClick={() => { setSelected(r); setSearch(""); }}
-                      className="flex items-center gap-2.5 w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-0"
-                      style={{ borderColor: DSU.lightBorder }}
-                    >
-                      <Avatar initials={r.initials} size={24} />
-                      <span className="text-[13px] font-medium" style={{ color: DSU.navy }}>{r.personName}</span>
+              {search && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1 border rounded bg-white overflow-hidden z-30"
+                  style={{ borderColor: DSU.lightBorder, boxShadow: "0 10px 28px -10px rgba(16,40,56,0.28)" }}
+                >
+                  {filtered.length === 0 ? (
+                    <div className="px-3 py-3 flex flex-col gap-2 items-start">
                       <span className="text-[12px]" style={{ color: DSU.midGray }}>
-                        {r.keyStamp}{r.roomDescription ? ` · ${r.roomDescription}` : ""}
+                        No outstanding key matches that — it may never have been logged as issued.
                       </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                      {onAddUntracked && (
+                        <button
+                          type="button"
+                          onClick={onAddUntracked}
+                          className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-2.5 py-1.5 rounded-md transition-colors hover:bg-black/[0.04]"
+                          style={{ color: DSU.navy }}
+                        >
+                          <Plus size={13} /> Add the person &amp; key, then mark it returned
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    filtered.map((r) => (
+                      <button
+                        key={r.assignmentId}
+                        type="button"
+                        onClick={() => { setSelected(r); setSearch(""); }}
+                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-0"
+                        style={{ borderColor: DSU.lightBorder }}
+                      >
+                        <Avatar initials={r.initials} size={24} />
+                        <span className="text-[13px] font-medium" style={{ color: DSU.navy }}>{r.personName}</span>
+                        <span className="text-[12px]" style={{ color: DSU.midGray }}>
+                          {r.keyStamp}{r.roomDescription ? ` · ${r.roomDescription}` : ""}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </IconField>
 
-        <Field label="Date returned" required>
-          <TextInput type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} required />
-        </Field>
+        <IconField icon={<CalendarClock size={12} />} title="Date returned" required>
+          <TextInput className="w-full" type="date" value={dateReturned} onChange={(e) => setDateReturned(e.target.value)} required />
+        </IconField>
 
         {!reviewingPdf && (
-          <div className="rounded-md border border-dashed p-3" style={{ borderColor: DSU.lightBorder, background: "#f9fafb" }}>
-            <div className="text-[12px] font-semibold mb-2" style={{ color: "#004165" }}>
-              Upload return form PDF
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium transition-colors hover:bg-blue-50" style={{ borderColor: DSU.lightBorder, color: "#004165" }}>
+          <FormSection icon={<FileUp size={13} />} title="Or upload a return form" hint="PDF" dark>
+            <label
+              className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3.5 py-2 text-[13px] font-medium transition-colors hover:bg-white/10"
+              style={{ borderColor: "rgba(255,255,255,0.25)", color: "#fff" }}
+            >
               <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} />
+              <FileUp size={14} />
               {extractingPdf
                 ? (ocrProgress ? `OCR page ${ocrProgress.page}/${ocrProgress.totalPages} — ${ocrProgress.status}` : "Reading PDF…")
                 : uploadedPdfName ? `Re-upload PDF (${uploadedPdfName})` : "Choose PDF"}
             </label>
-            <p className="mt-2 text-[11px]" style={{ color: DSU.midGray }}>
-              Upload a return form and we'll read the keys being returned. Multiple entries in one form will be reviewed before saving.
-              {extractingPdf && ocrProgress && " Scanned/handwritten forms are read with OCR, which takes longer and can misread handwriting — check the review step carefully."}
-            </p>
-          </div>
+          </FormSection>
         )}
 
         {!reviewingPdf && (
@@ -1160,9 +1365,9 @@ export function ReturnDialog({
         )}
 
         {reviewingPdf && parsedReturns.length > 0 && (
-          <div className="rounded-md border p-3" style={{ borderColor: DSU.lightBorder, background: "#f8fbfd" }}>
+          <div className="rounded-md border p-3" style={{ borderColor: DSU.lightBorder, background: DSU.zebra }}>
             <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="text-[12px] font-semibold" style={{ color: "#004165" }}>
+              <div className="text-[12px] font-semibold" style={{ color: DSU.navy }}>
                 Review keys to return
               </div>
               <Button type="button" onClick={applyParsedReturns} disabled={busy}>
@@ -1180,7 +1385,7 @@ export function ReturnDialog({
                   <div
                     key={entry.id}
                     className="rounded-md border p-2.5"
-                    style={{ borderColor: found ? "#e5e7eb" : "#ef5350", background: found ? "#fff" : "#fef4f3" }}
+                    style={{ borderColor: found ? DSU.lightBorder : DSU.danger, background: found ? "#fff" : "#fdf2f1" }}
                   >
                     <div className="grid grid-cols-3 gap-2">
                       <Field label="Person">
@@ -1216,7 +1421,7 @@ export function ReturnDialog({
                       </Field>
                     </div>
                     {!found && (
-                      <div className="mt-2 text-[11px]" style={{ color: "#ef5350" }}>
+                      <div className="mt-2 text-[11px]" style={{ color: DSU.danger }}>
                         ⚠ No matching outstanding key found for {entry.personName} / {entry.keyStamp}
                       </div>
                     )}

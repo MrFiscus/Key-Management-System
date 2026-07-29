@@ -1,4 +1,5 @@
 import type { Snapshot } from "./types";
+import { DEFAULT_PERSON_CATEGORY } from "./types";
 import { newId } from "./id";
 
 /**
@@ -55,6 +56,7 @@ export function buildSeed(): Snapshot {
         employeeId: null,
         department: dept,
         building,
+        category: DEFAULT_PERSON_CATEGORY,
       });
     }
 

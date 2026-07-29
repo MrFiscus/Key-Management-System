@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X, Users, KeyRound, Archive, Plus, ArrowLeft, LayoutDashboard, Menu, Map as MapIcon, LogOut,
-  HardDrive, User as UserIcon, Settings2,
+  HardDrive, User as UserIcon, Settings2, ShieldCheck,
 } from "lucide-react";
 
 import type {
   Assignment, DataStore, KeyActivity, KeyDef, KeyRecord, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../lib/types";
-import { toRecords } from "../lib/types";
+import { DEFAULT_PERSON_CATEGORY, toRecords } from "../lib/types";
 import { createStore, supabaseConfigured, getSupabase } from "../lib/stores";
 import type { Session } from "@supabase/supabase-js";
 import { DSU, appBarFill, font, radius, shadow, todayIso } from "./theme";
-import { Avatar, Button, HexBg, SkeletonBar, Toast, ErrorNote } from "./components/primitives";
+import { Avatar, Button, SkeletonBar, Toast, ErrorNote } from "./components/primitives";
 import { AssignmentDialog, AssignmentInput, ConfirmDialog, KeyDialog, PersonDialog, ReturnDialog } from "./components/EntityForms";
 import { SearchView } from "./views/SearchView";
 import { RecordsView } from "./views/RecordsView";
@@ -24,6 +24,7 @@ import { PersonView } from "./views/PersonView";
 import { KeyView } from "./views/KeyView";
 import { ProfileView } from "./views/ProfileView";
 import { SettingsView } from "./views/SettingsView";
+import { AdminView } from "./views/AdminView";
 import { GroupView } from "./views/GroupView";
 import type { RowActions, SortCol, SortDir } from "./views/KeyTable";
 
@@ -43,6 +44,7 @@ type Detail =
   | { type: "key"; id: string }
   | { type: "profile" }
   | { type: "settings" }
+  | { type: "admin" }
   | { type: "building"; name: string }
   | { type: "department"; name: string };
 
@@ -70,7 +72,31 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const signOut = async () => { await getSupabase()?.auth.signOut(); };
+  // Platform-admin status is read straight off the signed-in user's own
+  // profiles row (RLS already only lets them see that one row) — it just
+  // decides whether the Admin nav entry shows up. The actual authority lives
+  // server-side: every admin_* RPC re-checks is_platform_admin() itself, so
+  // this flag being wrong or stale client-side can't grant real access.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb || !session?.user?.id) { setIsPlatformAdmin(false); return; }
+    let cancelled = false;
+    sb.from("profiles").select("is_platform_admin").eq("id", session.user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error("Could not check admin status:", error.message);
+        setIsPlatformAdmin(Boolean(data?.is_platform_admin));
+      });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
+  const signOut = async () => {
+    await getSupabase()?.auth.signOut();
+    // Full navigation (not client-side state) since main.tsx picks LandingView
+    // vs. App purely off window.location.pathname at load time.
+    window.location.href = "/landing";
+  };
 
   /** Re-checks the current password before letting a full export proceed —
    *  returns an error message on failure, null on success. */
@@ -85,6 +111,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [wordmarkHover, setWordmarkHover] = useState(false);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const [keyActivity, setKeyActivity] = useState<KeyActivity[]>([]);
   const [sortCol, setSortCol] = useState<SortCol>("dateIssued");
@@ -116,13 +143,31 @@ export default function App() {
       .catch(() => setKeyActivity([]));
   };
   const openSettings = () => { setStack([{ type: "settings" }]); setProfileOpen(false); };
+  const openAdmin = () => { setStack([{ type: "admin" }]); setProfileOpen(false); };
 
   const refresh = useCallback(async () => {
     try {
       setSnapshot(await store.load());
       setLoadError("");
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      // A freshly-issued Supabase JWT can, very occasionally, fail
+      // PostgREST's "iat" check by a second or two right after sign-in if
+      // the auth and API services' clocks haven't quite settled yet. The
+      // token itself is fine — a short retry clears it instead of showing
+      // an error for something that a manual reload would fix anyway.
+      if (/issued at future/i.test(message)) {
+        await new Promise((r) => setTimeout(r, 1500));
+        try {
+          setSnapshot(await store.load());
+          setLoadError("");
+          return;
+        } catch (retryErr) {
+          setLoadError(retryErr instanceof Error ? retryErr.message : String(retryErr));
+          return;
+        }
+      }
+      setLoadError(message);
     }
   }, [store]);
 
@@ -256,6 +301,7 @@ export default function App() {
         employeeId: null,
         department: input.newPersonDept || null,
         building: input.newPersonBldg || null,
+        category: input.newPersonCategory || DEFAULT_PERSON_CATEGORY,
       });
       personId = newPerson.id;
     }
@@ -390,22 +436,36 @@ export default function App() {
       {/* ── Top nav ── */}
       <header className="sticky top-0 z-40" style={{ background: appBarFill, boxShadow: shadow.lg }}>
         <div className="relative">
-          <HexBg />
           <div className="relative w-full px-4 sm:px-6 min-h-[52px] flex items-center gap-3 flex-nowrap py-2">
             {/* Wordmark shrinks to just the mark on narrow screens so the
                 search field keeps its space. Doubles as a home link. */}
             <button
               type="button"
               onClick={() => goToTab("dashboard")}
+              onMouseEnter={() => setWordmarkHover(true)}
+              onMouseLeave={() => setWordmarkHover(false)}
               aria-label="Go to dashboard"
-              className="flex items-center gap-2 flex-shrink-0 rounded-md transition-opacity hover:opacity-90"
+              className="flex items-center gap-2 flex-shrink-0 rounded-md"
             >
-              <div className="flex items-center justify-center w-7 h-7 overflow-hidden flex-shrink-0" style={{ background: "#fff", borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>
+              <div
+                className="flex items-center justify-center w-7 h-7 overflow-hidden flex-shrink-0"
+                style={{
+                  background: "#fff",
+                  borderRadius: radius.sm,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                  transform: wordmarkHover ? "scale(1.1)" : "scale(1)",
+                  transition: "transform 200ms ease",
+                }}
+              >
                 <img src="/logo.png" alt="" className="w-full h-full object-cover" />
               </div>
               <span
-                className="hidden sm:inline text-white text-[20px] leading-none font-semibold tracking-tight"
-                style={{ fontFamily: font.display }}
+                className="hidden sm:inline text-[20px] leading-none font-semibold tracking-tight"
+                style={{
+                  fontFamily: font.display,
+                  color: wordmarkHover ? DSU.trojan : "#fff",
+                  transition: "color 200ms ease",
+                }}
               >
                 Fipher Keys
               </span>
@@ -507,6 +567,15 @@ export default function App() {
                     >
                       <Settings2 size={14} style={{ color: DSU.midGray }} /> Settings
                     </button>
+                    {isPlatformAdmin && (
+                      <button
+                        onClick={openAdmin}
+                        className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-[13px] transition-colors hover:bg-[#f4f8fb]"
+                        style={{ color: DSU.darkGray }}
+                      >
+                        <ShieldCheck size={14} style={{ color: DSU.midGray }} /> Admin
+                      </button>
+                    )}
                   </div>
 
                   {session?.user?.email && (
@@ -684,6 +753,8 @@ export default function App() {
             requireReauth={store.kind === "supabase"}
             onReauthorize={reauthorize}
           />
+        ) : current?.type === "admin" ? (
+          <AdminView onBack={goBack} backLabel={backLabel} currentUserId={session?.user?.id ?? null} />
         ) : searchQuery ? (
           /* Results overlay whichever tab you were on; clearing returns to it. */
           <>
@@ -799,6 +870,8 @@ export default function App() {
           keyDef={dialog.keyDef}
           onSave={(input) => saveKey(input, dialog.keyDef)}
           onClose={() => setDialog(null)}
+          buildings={buildingOptions}
+          departments={departmentOptions}
         />
       )}
 
@@ -819,6 +892,7 @@ export default function App() {
           records={activeRecords}
           onReturn={returnKey}
           onClose={() => setDialog(null)}
+          onAddUntracked={() => setDialog({ type: "assignment", assignment: null, defaultReturned: true })}
         />
       )}
 

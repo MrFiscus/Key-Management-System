@@ -1,7 +1,7 @@
 import type {
   Assignment, DataStore, KeyActivity, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
-import { EMPTY_MAP_LAYOUT } from "../types";
+import { DEFAULT_PERSON_CATEGORY, EMPTY_MAP_LAYOUT } from "../types";
 import { newId } from "../id";
 import { buildSeed } from "../seed";
 
@@ -260,6 +260,7 @@ function normalize(raw: any): Snapshot {
       employeeId: p.employeeId ?? null,
       department: p.department ?? null,
       building: p.building ?? null,
+      category: p.category || DEFAULT_PERSON_CATEGORY,
     })),
     keys: (raw?.keys ?? []).map((k: any) => ({
       id: k.id ?? newId(),

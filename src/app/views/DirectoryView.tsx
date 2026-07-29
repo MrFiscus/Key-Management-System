@@ -124,7 +124,6 @@ export function DirectoryView({
   };
 
   const hasFilter = Boolean(search || filterDept || filterBuilding || withKeysOnly);
-  const totalKeys = rows.reduce((sum, r) => sum + r.records.length, 0);
 
   return (
     <div>
@@ -253,11 +252,6 @@ export function DirectoryView({
               </tbody>
             </table>
           </div>
-
-          <p className="text-[11px] mt-2" style={{ color: DSU.midGray }}>
-            {totalKeys} key{totalKeys === 1 ? "" : "s"} held across {rows.length} listed{" "}
-            {rows.length === 1 ? "person" : "people"} · click the arrow to see which
-          </p>
         </>
       )}
     </div>
@@ -331,12 +325,13 @@ function PersonRows({
   return (
     <>
       <tr
-        className="border-b group transition-colors dsu-row-in"
+        className={`border-b group transition-colors dsu-row-in ${!showCard && records.length > 0 ? "cursor-pointer" : ""}`}
         style={{
           borderColor: "#eaebec",
           background: showCard ? "#ffffff" : base,
           animationDelay: `${Math.min(index, 14) * 16}ms`,
         }}
+        onClick={!showCard && records.length > 0 ? onToggle : undefined}
         onMouseEnter={(e) => {
           if (showCard) return;
           e.currentTarget.style.background = HOVER_ROW;
@@ -349,20 +344,26 @@ function PersonRows({
         }}
       >
         {/* Toggle stays in this exact cell whichever state we're in, so the
-            button never jumps when the row expands or collapses. */}
+            button never jumps when the row expands or collapses. The whole
+            row is now the click target when collapsed (see onClick above) —
+            this stays as an explicit, keyboard-reachable affordance rather
+            than the only way in. */}
         <td
           className={`pl-2 align-top ${showCard ? "pt-[13px]" : "pt-1.5"}`}
           style={showCard ? { boxShadow: `inset 3px 0 0 ${DSU.trojan}` } : undefined}
         >
           <button
-            onClick={onToggle}
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
             aria-expanded={isOpen}
             aria-label={isOpen ? `Collapse ${person.fullName}` : `Expand ${person.fullName}`}
             disabled={records.length === 0}
-            className="p-1 rounded hover:bg-black/[0.07] disabled:opacity-25 disabled:cursor-default"
-            style={{ color: DSU.midGray }}
+            className="flex items-center justify-center w-6 h-6 rounded-full transition-all duration-200 hover:scale-110 disabled:opacity-25 disabled:cursor-default disabled:hover:scale-100"
+            style={{ background: DSU.tintBg, color: DSU.trojan }}
           >
-            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <ChevronRight
+              size={13}
+              style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 200ms ease" }}
+            />
           </button>
         </td>
 
@@ -529,7 +530,7 @@ function PersonRows({
           <>
             <td className="px-3 py-1.5 whitespace-nowrap">
               <button
-                onClick={onOpen}
+                onClick={(e) => { e.stopPropagation(); onOpen(); }}
                 className="inline-flex items-center gap-2 text-left hover:underline font-medium"
                 style={{ color: DSU.navy }}
                 title={`View ${person.fullName}`}
@@ -542,7 +543,7 @@ function PersonRows({
             <td className="px-3 py-1.5 whitespace-nowrap">
               {person.department ? (
                 onSelectDepartment ? (
-                  <button onClick={() => onSelectDepartment(person.department!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                  <button onClick={(e) => { e.stopPropagation(); onSelectDepartment(person.department!); }} className="hover:underline text-left" style={{ font: "inherit" }}>
                     {person.department}
                   </button>
                 ) : person.department
@@ -551,7 +552,7 @@ function PersonRows({
             <td className="px-3 py-1.5 whitespace-nowrap">
               {person.building ? (
                 onSelectBuilding ? (
-                  <button onClick={() => onSelectBuilding(person.building!)} className="hover:underline text-left" style={{ font: "inherit" }}>
+                  <button onClick={(e) => { e.stopPropagation(); onSelectBuilding(person.building!); }} className="hover:underline text-left" style={{ font: "inherit" }}>
                     {person.building}
                   </button>
                 ) : person.building
@@ -581,7 +582,7 @@ function PersonRows({
                     <Stamp key={r.assignmentId} stamp={r.keyStamp} onClick={() => onSelectKey(r.keyId)} size={11} />
                   ))}
                   {ordered.length > 4 && (
-                    <button onClick={onToggle} className="text-[11px] hover:underline" style={{ color: DSU.midGray }}>
+                    <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="text-[11px] hover:underline" style={{ color: DSU.midGray }}>
                       +{ordered.length - 4} more
                     </button>
                   )}
@@ -592,7 +593,7 @@ function PersonRows({
             <td className="px-3 py-1.5">
               <div className="flex items-center justify-end gap-1 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <button
-                  onClick={onEdit}
+                  onClick={(e) => { e.stopPropagation(); onEdit(); }}
                   title="Edit person" aria-label="Edit person"
                   className="p-1 rounded hover:bg-black/[0.07]"
                   style={{ color: DSU.midGray }}
@@ -600,7 +601,7 @@ function PersonRows({
                   <Pencil size={13} />
                 </button>
                 <button
-                  onClick={onDelete}
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
                   title="Delete person" aria-label="Delete person"
                   className="p-1 rounded hover:bg-black/[0.07]"
                   style={{ color: DSU.danger }}

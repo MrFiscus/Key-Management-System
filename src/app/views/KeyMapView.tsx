@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, X, MapPin, Plus, Minus, Maximize, KeyRound, Building2, Users,
-  Pencil, Copy, RotateCcw, Check,
+  Pencil, Copy, RotateCcw, Check, ArrowRight,
 } from "lucide-react";
 import type { KeyRecord, DataStore, MapBoxRect } from "../../lib/types";
 import { DSU, font, radius, shadow } from "../theme";
@@ -58,8 +58,22 @@ function StatTile({
 }: {
   icon: React.ReactNode; bg: string; label: string; value: number; solid?: boolean;
 }) {
+  // Same lift/shadow language as the Dashboard's stat cards: a solid tile
+  // darkens toward navyHover, a white one tints toward the accent wash.
+  const [hover, setHover] = useState(false);
   return (
-    <div className="p-4" style={solid ? { ...CARD, background: bg } : CARD}>
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="p-4"
+      style={{
+        ...CARD,
+        background: solid ? (hover ? DSU.navyHover : bg) : (hover ? DSU.tintBg : "#ffffff"),
+        boxShadow: hover ? shadow.lg : shadow.sm,
+        transform: hover ? "translateY(-4px)" : "translateY(0)",
+        transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+      }}
+    >
       <div className="flex items-start justify-between mb-2.5">
         <span className="text-[13px] font-medium" style={{ color: solid ? "rgba(255,255,255,0.75)" : DSU.midGray }}>{label}</span>
         <IconBadge icon={icon} bg={solid ? "#ffffff" : bg} fg={solid ? bg : "#ffffff"} />
@@ -588,7 +602,10 @@ export function KeyMapView({
             </div>
           )}
 
-          <div className="absolute bottom-2 left-3 text-[11px] pointer-events-none" style={{ color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
+          <div
+            className={`absolute left-3 text-[11px] pointer-events-none ${editing ? "top-12" : "top-3"}`}
+            style={{ color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}
+          >
             Click a building for its keys · drag to pan · scroll to zoom
           </div>
         </div>
@@ -634,13 +651,13 @@ export function KeyMapView({
               {selectedKeys.length} key{selectedKeys.length === 1 ? "" : "s"} currently assigned here
             </span>
             {onSelectBuilding && (
-              <button
+              <Button
+                variant="secondary"
+                className="ml-auto"
                 onClick={() => { setSelectedId(null); onSelectBuilding(selected.name); }}
-                className="hover:underline font-medium"
-                style={{ color: DSU.navy }}
               >
-                View full building page →
-              </button>
+                View full building page <ArrowRight size={13} />
+              </Button>
             )}
           </div>
           {selectedKeys.length === 0 ? (

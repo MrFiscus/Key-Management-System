@@ -41,7 +41,7 @@ export function DashboardView({
   records: KeyRecord[];
   onSelectPerson: (id: string) => void;
   onSelectKey: (id: string) => void;
-  onGoToTab: (tab: "returned" | "keys" | "directory") => void;
+  onGoToTab: (tab: "returned" | "keys" | "directory" | "map") => void;
   /** Data & backups now live inside Settings, not a nav tab of their own. */
   onOpenData: () => void;
   onSearch: (query: string) => void;
@@ -163,7 +163,7 @@ export function DashboardView({
             />
             <StatCard
               icon={<Building2 size={16} />} badgeBg={DSU.navy}
-              label="Buildings" value={buildings}
+              label="Buildings" value={buildings} onClick={() => onGoToTab("map")}
             />
             <StatCard
               icon={<Undo2 size={16} />} badgeBg={DSU.trojan}

@@ -1,7 +1,7 @@
 import type ExcelJS from "exceljs";
 import type { Snapshot, KeyRecord } from "./types";
 import { newId } from "./id";
-import { toRecords } from "./types";
+import { PERSON_CATEGORIES, DEFAULT_PERSON_CATEGORY, toRecords } from "./types";
 
 /**
  * Excel import/export.
@@ -256,6 +256,11 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
           employeeId: text(col(row, "employeeId")) || null,
           department,
           building,
+          // Which sheet this person's row first appeared on — lets export
+          // rebuild the same multi-sheet layout. Sheets literally named
+          // "Returned" carry that name through too, though export never uses
+          // it for routing (it always routes by dateReturned instead).
+          category: sheet.name,
         });
       }
 
@@ -415,83 +420,152 @@ function guessBuilding(sheetName: string): string | null {
 }
 
 // ── export ────────────────────────────────────────────────────────────────────
+// Rebuilds the same shape as the source DSU audit workbook: one sheet per
+// person category (Directory, Campus Watch, CommunityCenter, GA Forms,
+// Sodexo, Facilities Department) holding that category's open assignments,
+// plus one Returned sheet catching every closed-out assignment regardless of
+// category — matching how the original file only ever grouped ACTIVE records
+// by roster.
+
+const AUDIT_HEADERS = [
+  "LastName", "FirstName", "Building ", "Department",
+  "Date Issued", "Date Returned", "# of Key", "Room Description/ Number ", "Key Stamp",
+];
+
+// Column widths copied from the source workbook's largest sheet (Directory) —
+// applied to every sheet for a consistent look.
+const AUDIT_COL_WIDTHS = [
+  17, 18, 32.7109375, 64.85546875, 12.7109375, 15.85546875, 9.5703125, 52.42578125, 22.42578125,
+];
+
+// Tab colors copied cell-for-cell from the source workbook. Returned, and any
+// custom category name an import brought in, get no tab color — same as the
+// source's own Returned sheet.
+const AUDIT_TAB_COLORS: Record<string, { argb: string } | { theme: number; tint: number }> = {
+  "Directory": { argb: "FFD3F2F2" },
+  "Campus Watch": { theme: 7, tint: 0.5999938962981048 },
+  "CommunityCenter": { theme: 9, tint: 0.5999938962981048 },
+  "GA Forms": { theme: 2, tint: -0.0999786370433668 },
+  "Sodexo": { theme: 5, tint: 0.5999938962981048 },
+  "Facilities Department": { theme: 4, tint: 0.5999938962981048 },
+};
+
+const RETURNED_SHEET_NAME = "Returned";
+
+const THIN_BLACK = { style: "thin" as const, color: { argb: "FF000000" } };
+const AUDIT_CELL_BORDER = { top: THIN_BLACK, left: THIN_BLACK, bottom: THIN_BLACK, right: THIN_BLACK };
+
+/** "First Middle Last" → { lastName: "Last", firstName: "First Middle" } —
+ *  the reverse of the join importers do, so a round trip through export and
+ *  back in still lines up. Best-effort only: a name that's already just a
+ *  single word has no last name to split off. */
+function splitPersonName(fullName: string): { lastName: string; firstName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { lastName: "", firstName: "" };
+  if (parts.length === 1) return { lastName: parts[0], firstName: "" };
+  return { lastName: parts[parts.length - 1], firstName: parts.slice(0, -1).join(" ") };
+}
+
+/** Reassembles the source workbook's single combined room column. */
+function combinedRoom(roomNumber: string, roomDescription: string): string {
+  const rn = roomNumber.trim();
+  const rd = roomDescription.trim();
+  if (rn && rd) return rn === rd ? rd : `${rd} ${rn}`;
+  return rd || rn;
+}
+
+function addAuditSheet(wb: ExcelJS.Workbook, name: string, records: KeyRecord[]): void {
+  const sheet = wb.addWorksheet(name);
+  sheet.addRow(AUDIT_HEADERS);
+
+  const sorted = [...records].sort((a, b) => {
+    const an = splitPersonName(a.personName);
+    const bn = splitPersonName(b.personName);
+    return an.lastName.localeCompare(bn.lastName) || an.firstName.localeCompare(bn.firstName);
+  });
+  for (const r of sorted) {
+    const { lastName, firstName } = splitPersonName(r.personName);
+    sheet.addRow([
+      lastName,
+      firstName,
+      r.building,
+      r.department,
+      dateCell(r.dateIssued),
+      dateCell(r.dateReturned),
+      r.numKeys,
+      combinedRoom(r.roomNumber, r.roomDescription),
+      r.keyStamp,
+    ]);
+  }
+
+  sheet.getRow(1).height = 15.75;
+  AUDIT_COL_WIDTHS.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
+  for (let rowNum = 1; rowNum <= sorted.length + 1; rowNum++) {
+    const row = sheet.getRow(rowNum);
+    for (let col = 1; col <= AUDIT_HEADERS.length; col++) {
+      const cell = row.getCell(col);
+      cell.border = AUDIT_CELL_BORDER;
+      cell.font = rowNum === 1
+        ? { bold: true, italic: true, size: 12, name: "Calibri" }
+        : { size: 11, name: "Calibri" };
+    }
+  }
+  sheet.getColumn(5).numFmt = "mm-dd-yy"; // Date Issued
+  sheet.getColumn(6).numFmt = "mm-dd-yy"; // Date Returned
+  sheet.getColumn(9).numFmt = "@";        // Key Stamp — kept as text (e.g. "404.16")
+
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.pageSetup = {
+    orientation: "landscape",
+    margins: { left: 0.25, right: 0.25, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+    fitToWidth: 1,
+    fitToHeight: 1,
+  };
+  const tabColor = AUDIT_TAB_COLORS[name];
+  if (tabColor) sheet.properties.tabColor = tabColor;
+}
 
 /**
- * Writes a three-sheet workbook: the flat Records sheet (re-importable, and the
- * one to read), plus People and Keys reference sheets.
+ * Writes a workbook shaped exactly like the source DSU audit spreadsheet:
+ * Directory / Campus Watch / CommunityCenter / GA Forms / Sodexo / Facilities
+ * Department / Returned, each with the same LastName…Key Stamp columns,
+ * header styling, borders, frozen header row, and tab colors.
  */
 export async function buildWorkbook(snap: Snapshot): Promise<Blob> {
   const Excel = await loadExcelJS();
   const wb = new Excel.Workbook();
   wb.created = new Date();
 
-  const records = toRecords(snap).sort(
-    (a, b) => a.personName.localeCompare(b.personName) || b.dateIssued.localeCompare(a.dateIssued),
-  );
+  const records = toRecords(snap);
+  const active = records.filter((r) => r.isActive);
+  const returned = records.filter((r) => !r.isActive);
 
-  const rec = wb.addWorksheet("Key Records");
-  rec.columns = [
-    { header: "Person Name", key: "personName", width: 24 },
-    { header: "Department", key: "department", width: 20 },
-    { header: "Building", key: "building", width: 24 },
-    { header: "Room Description", key: "roomDescription", width: 24 },
-    { header: "Room Number", key: "roomNumber", width: 14 },
-    { header: "Key Stamp", key: "keyStamp", width: 12 },
-    { header: "Date Issued", key: "dateIssued", width: 13 },
-    { header: "Date Returned", key: "dateReturned", width: 14 },
-    { header: "Number of Keys", key: "numKeys", width: 15 },
-    { header: "Status", key: "status", width: 10 },
-    { header: "Notes", key: "notes", width: 30 },
-  ];
-  records.forEach((r: KeyRecord) =>
-    rec.addRow({
-      ...r,
-      dateIssued: dateCell(r.dateIssued),
-      dateReturned: dateCell(r.dateReturned),
-      status: r.isActive ? "Active" : "Returned",
-      notes: r.notes ?? "",
-    }),
-  );
-
-  const ppl = wb.addWorksheet("People");
-  ppl.columns = [
-    { header: "Full Name", key: "fullName", width: 24 },
-    { header: "Email", key: "email", width: 28 },
-    { header: "Employee ID", key: "employeeId", width: 14 },
-    { header: "Department", key: "department", width: 20 },
-    { header: "Building", key: "building", width: 24 },
-  ];
-  [...snap.people]
-    .sort((a, b) => a.fullName.localeCompare(b.fullName))
-    .forEach((p) => ppl.addRow(p));
-
-  const kys = wb.addWorksheet("Keys");
-  kys.columns = [
-    { header: "Key Stamp", key: "keyStamp", width: 12 },
-    { header: "Room Number", key: "roomNumber", width: 14 },
-    { header: "Room Description", key: "roomDescription", width: 24 },
-    { header: "Building", key: "building", width: 24 },
-    { header: "Department", key: "department", width: 20 },
-    { header: "Notes", key: "notes", width: 30 },
-  ];
-  [...snap.keys]
-    .sort((a, b) => a.keyStamp.localeCompare(b.keyStamp, undefined, { numeric: true }))
-    .forEach((k) => kys.addRow(k));
-
-  for (const sheet of [rec, ppl, kys]) {
-    sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    sheet.getRow(1).fill = {
-      type: "pattern", pattern: "solid", fgColor: { argb: "FF004165" },
-    };
-    sheet.getRow(1).height = 20;
-    sheet.views = [{ state: "frozen", ySplit: 1 }];
-    sheet.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: sheet.columns.length },
-    };
+  const byCategory = new Map<string, KeyRecord[]>();
+  for (const r of active) {
+    // An open (still-active) record can't really belong on the Returned
+    // sheet — that name is reserved for the closed-out bucket below. Some
+    // real source data has rows imported from a sheet literally named
+    // "Returned" but with a blank Date Returned cell, which would otherwise
+    // collide with it; fall back to Directory instead.
+    let cat = r.category || DEFAULT_PERSON_CATEGORY;
+    if (cat === RETURNED_SHEET_NAME) cat = DEFAULT_PERSON_CATEGORY;
+    const list = byCategory.get(cat);
+    if (list) list.push(r); else byCategory.set(cat, [r]);
   }
-  rec.getColumn("dateIssued").numFmt = "mm/dd/yyyy";
-  rec.getColumn("dateReturned").numFmt = "mm/dd/yyyy";
+
+  // The six known categories always get a sheet, even empty, so the export
+  // always has the same shape as the source workbook.
+  for (const cat of PERSON_CATEGORIES) {
+    addAuditSheet(wb, cat, byCategory.get(cat) ?? []);
+    byCategory.delete(cat);
+  }
+  // Anything left over is a custom category name (from a hand-edited import)
+  // — only worth a sheet if it actually has rows.
+  for (const [cat, recs] of byCategory) {
+    addAuditSheet(wb, cat, recs);
+  }
+
+  addAuditSheet(wb, RETURNED_SHEET_NAME, returned);
 
   const buffer = await wb.xlsx.writeBuffer();
   return new Blob([buffer], {

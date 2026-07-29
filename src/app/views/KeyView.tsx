@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft, Pencil, Plus, Trash2, CornerDownLeft, MapPin, Building2, StickyNote,
   Users, CalendarClock, KeyRound,
@@ -56,6 +56,7 @@ export function KeyView({
   onSelectBuilding?: (name: string) => void;
   onSelectDepartment?: (name: string) => void;
 }) {
+  const [heroHover, setHeroHover] = useState(false);
   const active = useMemo(
     () => records.filter((r) => r.isActive).sort((a, b) => a.personName.localeCompare(b.personName)),
     [records],
@@ -157,7 +158,19 @@ export function KeyView({
       {/* ── Stat tiles ── a solid-navy featured card for the headline number,
           three white supporting cards — same card language as the Dashboard. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <div className="p-4" style={{ ...CARD, background: DSU.navy, color: "#fff" }}>
+        <div
+          onMouseEnter={() => setHeroHover(true)}
+          onMouseLeave={() => setHeroHover(false)}
+          className="p-4"
+          style={{
+            ...CARD,
+            background: heroHover ? DSU.navyHover : DSU.navy,
+            color: "#fff",
+            boxShadow: heroHover ? shadow.lg : shadow.sm,
+            transform: heroHover ? "translateY(-4px)" : "translateY(0)",
+            transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+          }}
+        >
           <div className="flex items-start justify-between mb-2.5">
             <span className="text-[13px] font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>Held Now</span>
             <IconBadge icon={<Users size={14} />} bg="#ffffff" fg={DSU.navy} />
@@ -214,8 +227,21 @@ function StatTile({
 }: {
   icon: React.ReactNode; badgeBg: string; label: string; value: number; sub: string;
 }) {
+  // Same lift/tint/shadow language as the Dashboard's stat cards.
+  const [hover, setHover] = useState(false);
   return (
-    <div className="p-4" style={CARD}>
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="p-4"
+      style={{
+        ...CARD,
+        background: hover ? DSU.tintBg : "#ffffff",
+        boxShadow: hover ? shadow.lg : shadow.sm,
+        transform: hover ? "translateY(-4px)" : "translateY(0)",
+        transition: "background-color 180ms ease, box-shadow 220ms ease, transform 220ms ease",
+      }}
+    >
       <div className="flex items-start justify-between mb-2.5">
         <span className="text-[13px] font-medium" style={{ color: DSU.midGray }}>{label}</span>
         <IconBadge icon={icon} bg={badgeBg} fg="#fff" />

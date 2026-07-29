@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   Assignment, DataStore, KeyActivity, KeyDef, MapLayout, NewAssignment, NewKeyDef, NewPerson, Person, Snapshot,
 } from "../types";
+import { DEFAULT_PERSON_CATEGORY } from "../types";
 
 /**
  * Postgres-backed store. Inactive until VITE_SUPABASE_URL and
@@ -45,6 +46,7 @@ const rowToPerson = (r: any): Person => ({
   employeeId: r.employee_id,
   department: r.department,
   building: r.building,
+  category: r.category || DEFAULT_PERSON_CATEGORY,
 });
 
 const personToRow = (p: Partial<NewPerson>) => ({
@@ -53,6 +55,7 @@ const personToRow = (p: Partial<NewPerson>) => ({
   ...(p.employeeId !== undefined && { employee_id: p.employeeId }),
   ...(p.department !== undefined && { department: p.department }),
   ...(p.building !== undefined && { building: p.building }),
+  ...(p.category !== undefined && { category: p.category }),
 });
 
 const rowToKey = (r: any): KeyDef => ({

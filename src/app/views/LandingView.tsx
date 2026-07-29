@@ -95,7 +95,18 @@ function HeroBackdrop() {
  *  one effect. Listens on `window`, not the canvas itself, and stays
  *  `pointer-events-none`, so it never steals clicks from the buttons and
  *  screenshots sitting on top of it. */
-function ParticleField() {
+/** Fractional (0–1) position + radius for a solid-colour radial falloff that
+ *  settles the particle network back into the navy behind a piece of UI, so
+ *  drifting keys thread through the background without crossing in front of
+ *  anything a visitor needs to read. */
+type Vignette = { x: number; y: number; r: number; alpha: number };
+
+const HERO_VIGNETTES: Vignette[] = [
+  { x: 0.24, y: 0.52, r: 0.46, alpha: 0.82 },
+  { x: 0.74, y: 0.46, r: 0.4, alpha: 0.58 },
+];
+
+export function ParticleField({ vignettes = HERO_VIGNETTES }: { vignettes?: Vignette[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -205,27 +216,19 @@ function ParticleField() {
         drawKey(p.x, p.y, Math.atan2(p.vy, p.vx), 0.65);
       }
 
-      // Settle the network back into the navy behind the headline (left) and
-      // the screenshot stack (right) so drifting keys thread through the
-      // background without crossing in front of anything a visitor needs to
-      // read. Solid-colour radial falloff only, no visible colour gradient.
-      const textVignette = ctx!.createRadialGradient(
-        width * 0.24, height * 0.52, 0,
-        width * 0.24, height * 0.52, Math.max(width, height) * 0.46
-      );
-      textVignette.addColorStop(0, "rgba(0,46,71,0.82)");
-      textVignette.addColorStop(1, "rgba(0,46,71,0)");
-      ctx!.fillStyle = textVignette;
-      ctx!.fillRect(0, 0, width, height);
-
-      const imageVignette = ctx!.createRadialGradient(
-        width * 0.74, height * 0.46, 0,
-        width * 0.74, height * 0.46, Math.max(width, height) * 0.4
-      );
-      imageVignette.addColorStop(0, "rgba(0,46,71,0.58)");
-      imageVignette.addColorStop(1, "rgba(0,46,71,0)");
-      ctx!.fillStyle = imageVignette;
-      ctx!.fillRect(0, 0, width, height);
+      // Solid-colour radial falloff only, no visible colour gradient — matches
+      // DSU.navyDark exactly so it composites into the flat background rather
+      // than reading as a separate tinted patch.
+      for (const v of vignettes) {
+        const grad = ctx!.createRadialGradient(
+          width * v.x, height * v.y, 0,
+          width * v.x, height * v.y, Math.max(width, height) * v.r
+        );
+        grad.addColorStop(0, `rgba(0,46,71,${v.alpha})`);
+        grad.addColorStop(1, "rgba(0,46,71,0)");
+        ctx!.fillStyle = grad;
+        ctx!.fillRect(0, 0, width, height);
+      }
 
       if (mouse) {
         ctx!.fillStyle = "rgba(255,255,255,0.85)";
@@ -259,7 +262,7 @@ function ParticleField() {
 
 /** A real screenshot of the app, framed the same way across every showcase
  *  panel — rounded, elevated, a hairline ring instead of a hard border. */
-function ScreenshotFrame({ src, alt, className = "" }: { src: string; alt: string; className?: string }) {
+export function ScreenshotFrame({ src, alt, className = "" }: { src: string; alt: string; className?: string }) {
   return (
     <div
       className={`overflow-hidden ${className}`}
@@ -356,10 +359,10 @@ const TRUST: { icon: React.ReactNode; title: string; body: string }[] = [
  *  or specific institutions attached, since this product doesn't have live
  *  customers yet to quote honestly. */
 const TESTIMONIALS: { quote: string; name: string; role: string }[] = [
-  { quote: "We stopped keeping a shadow spreadsheet the week we turned this on. It's just the record now.", name: "M. Alvarez", role: "Facilities Coordinator" },
+  { quote: "We stopped keeping a shadow spreadsheet the week we turned this on. It's just the record now.", name: "M. Alvarez", role: "Operations Coordinator" },
   { quote: "Handing off building keys used to mean calling three people. Now it's one search.", name: "J. Whitfield", role: "Campus Operations Manager" },
   { quote: "The audit trail is the part I lean on most. It tells me who last touched a key without asking around.", name: "R. Chen", role: "Director of Housing" },
-  { quote: "Uploading old paper request forms and having it read the details back sold my whole team.", name: "T. Okafor", role: "Facilities Administrator" },
+  { quote: "Uploading old paper request forms and having it read the details back sold my whole team.", name: "T. Okafor", role: "Office Administrator" },
   { quote: "I can finally answer who has the master key to that building in under a minute.", name: "S. Novak", role: "Physical Plant Supervisor" },
   { quote: "A password recheck before an export sounds small until you realize what a full key roster is worth.", name: "D. Park", role: "Security & Access Lead" },
 ];
@@ -492,12 +495,15 @@ const contactFieldStyle: React.CSSProperties = { borderColor: DSU.lightBorder, c
 function ContactSection() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [organization, setOrganization] = useState("");
   const [message, setMessage] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const subject = encodeURIComponent(`Fipher Keys inquiry from ${name || "website visitor"}`);
-    const body = encodeURIComponent(`${message}\n\nFrom: ${name}\nEmail: ${email}`);
+    const subject = encodeURIComponent(`Access code request — ${organization || name || "website visitor"}`);
+    const body = encodeURIComponent(
+      `${message}\n\nName: ${name}\nEmail: ${email}\nOrganization: ${organization}`
+    );
     window.location.href = `mailto:support@fipherkeys.com?subject=${subject}&body=${body}`;
   };
 
@@ -506,13 +512,13 @@ function ContactSection() {
       <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1fr] gap-10 lg:gap-16">
         <Reveal direction="left">
           <span className="text-[11px] font-semibold uppercase" style={{ color: DSU.trojan, letterSpacing: "0.14em" }}>
-            Contact
+            Get Access
           </span>
           <h2 className="text-[28px] sm:text-[34px] font-semibold leading-tight mt-2" style={{ fontFamily: DISPLAY, color: DSU.navy }}>
-            Questions before you sign in?
+            Get an access code for your organization
           </h2>
-          <p className="text-[14px] mt-4 max-w-[380px] leading-relaxed" style={{ color: DSU.midGray }}>
-            Send a note and someone from the facilities systems team will get back to you.
+          <p className="text-[14px] mt-4 max-w-[450px] leading-relaxed" style={{ color: DSU.midGray }}>
+            Tell us a bit about your team and we'll set you up as per requirements so you can start issuing, tracking, and recovering keys.
           </p>
           <div className="flex flex-col gap-3 mt-6">
             {[
@@ -561,14 +567,21 @@ function ContactSection() {
               </label>
             </div>
             <label className="flex flex-col gap-1.5 mt-4">
+              <span className="text-[12px] font-medium" style={{ color: DSU.darkGray }}>Organization</span>
+              <input
+                required value={organization} onChange={(e) => setOrganization(e.target.value)}
+                className={contactFieldClasses} style={contactFieldStyle} placeholder="Your school, department, or company"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 mt-4">
               <span className="text-[12px] font-medium" style={{ color: DSU.darkGray }}>Message</span>
               <textarea
                 required value={message} onChange={(e) => setMessage(e.target.value)} rows={4}
-                className={contactFieldClasses} style={contactFieldStyle} placeholder="What are you trying to do?"
+                className={contactFieldClasses} style={contactFieldStyle} placeholder="We'd like to start tracking keys for our organization."
               />
             </label>
             <Button type="submit" variant="primary" className="!mt-5 !px-6 !py-3 !text-[14px] !rounded-full w-full sm:w-auto justify-center">
-              Send message <ArrowRight size={15} />
+              Contact us <ArrowRight size={15} />
             </Button>
           </form>
         </Reveal>
@@ -603,7 +616,7 @@ function HeroImageStack() {
         }}
       >
         <ScreenshotFrame
-          src="/landing/directory.jpg"
+          src="/landing/directory-card.jpg"
           alt="Key holder directory with an expanded row of keys"
         />
       </div>
@@ -619,7 +632,7 @@ function HeroImageStack() {
         }}
       >
         <ScreenshotFrame
-          src="/landing/key.jpg"
+          src="/landing/key-card.jpg"
           alt="Key detail page showing current and previous holders"
         />
       </div>
@@ -638,12 +651,64 @@ export function LandingView() {
   // texture) once the page has actually scrolled, so it reads against the
   // lighter sections beneath instead of floating illegibly over them.
   const [scrolled, setScrolled] = useState(false);
+  const [wordmarkHover, setWordmarkHover] = useState(false);
+  // Section nav links stay out of the header entirely until the hero has
+  // scrolled past — the hero already carries its own CTAs, so the links only
+  // earn their place once the visitor is scrolling through the page.
+  const [showNavLinks, setShowNavLinks] = useState(false);
+  const featuresRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 24);
+      if (featuresRef.current) {
+        setShowNavLinks(featuresRef.current.getBoundingClientRect().top <= 60);
+      }
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Header swaps between a dark and a light theme to match whichever section
+  // is currently passing behind it, so it never sits as a same-navy-on-navy
+  // slab over how-it-works/testimonials/footer or an illegible white-on-white
+  // block over the light sections. A thin IntersectionObserver "line" just
+  // under the header reports whichever section is crossing it right now.
+  const [headerTheme, setHeaderTheme] = useState<"dark" | "light">("dark");
+  const heroRef = useRef<HTMLElement | null>(null);
+  const howItWorksRef = useRef<HTMLElement | null>(null);
+  const whyRef = useRef<HTMLElement | null>(null);
+  const testimonialsRef = useRef<HTMLElement | null>(null);
+  const ctaRef = useRef<HTMLElement | null>(null);
+  const footerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    // Each entry is the header theme to show while that section is behind
+    // it — the opposite of the section's own background, for contrast,
+    // except the hero: that one keeps the header's original dark-on-dark
+    // look rather than flipping it.
+    const sections: { ref: React.RefObject<HTMLElement | null>; theme: "dark" | "light" }[] = [
+      { ref: heroRef, theme: "dark" },
+      { ref: featuresRef, theme: "dark" },
+      { ref: howItWorksRef, theme: "light" },
+      { ref: whyRef, theme: "dark" },
+      { ref: testimonialsRef, theme: "light" },
+      { ref: ctaRef, theme: "dark" },
+      { ref: footerRef, theme: "light" },
+    ];
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const match = sections.find((s) => s.ref.current === entry.target);
+          if (match) setHeaderTheme(match.theme);
+        }
+      },
+      { rootMargin: "-60px 0px -100% 0px", threshold: 0 },
+    );
+    sections.forEach((s) => { if (s.ref.current) io.observe(s.ref.current); });
+    return () => io.disconnect();
+  }, []);
+  const dark = headerTheme === "dark";
 
   return (
     <div className="min-h-screen" style={{ background: DSU.gray, fontFamily: BODY }}>
@@ -655,37 +720,79 @@ export function LandingView() {
       <header
         className="sticky top-0 z-40"
         style={{
-          // The hero directly beneath is solid DSU.navyDark, so matching it
-          // here (rather than true CSS transparency, which would reveal the
-          // page's own light-gray background sitting above the hero in the
-          // document) is what actually reads as "the header blends in."
-          background: scrolled ? DSU.navy : DSU.navyDark,
-          boxShadow: scrolled ? shadow.lg : "none",
-          transition: "background 220ms ease, box-shadow 220ms ease",
+          // Flips between the page's two surface tones to match whichever
+          // section is currently behind it (see the headerTheme observer
+          // above), so it never reads as a same-color slab over a dark
+          // section or an illegible block over a light one.
+          background: dark ? DSU.navyDark : "#e7e9eb",
+          boxShadow: !dark ? shadow.md : scrolled ? shadow.lg : "none",
+          transition: "background-color 300ms ease, box-shadow 220ms ease",
         }}
       >
         <div className="relative">
-          {scrolled && <HexBg />}
           <div className="relative w-full px-6 sm:px-10 lg:px-16 min-h-[52px] flex items-center gap-3 py-2 max-w-[1680px] mx-auto">
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <a
+              href="/landing"
+              onMouseEnter={() => setWordmarkHover(true)}
+              onMouseLeave={() => setWordmarkHover(false)}
+              className="flex items-center gap-2 flex-shrink-0"
+            >
               <div
                 className="flex items-center justify-center w-7 h-7 overflow-hidden flex-shrink-0"
-                style={{ background: "#fff", borderRadius: radius.sm, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}
+                style={{
+                  background: dark ? "#fff" : DSU.tintBg,
+                  borderRadius: radius.sm,
+                  boxShadow: dark ? "0 1px 3px rgba(0,0,0,0.25)" : "none",
+                  transform: wordmarkHover ? "scale(1.1)" : "scale(1)",
+                  transition: "transform 200ms ease, background-color 300ms ease",
+                }}
               >
                 <img src="/logo.png" alt="" className="w-full h-full object-cover" />
               </div>
               <span
-                className="text-white text-[18px] leading-none font-semibold tracking-tight"
-                style={{ fontFamily: DISPLAY }}
+                className="text-[18px] leading-none font-semibold tracking-tight"
+                style={{
+                  fontFamily: DISPLAY,
+                  color: wordmarkHover ? DSU.trojan : dark ? "#fff" : DSU.navy,
+                  transition: "color 200ms ease",
+                }}
               >
                 Fipher Keys
               </span>
-            </div>
+            </a>
+
             <div className="flex-1" />
+
+            <nav
+              className={`hidden lg:flex items-center gap-7 mr-7 transition-all duration-300 ${
+                showNavLinks ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+              }`}
+            >
+              {[
+                { label: "Features", href: "#features" },
+                { label: "How it works", href: "#how-it-works" },
+                { label: "Why it matters", href: "#why-it-matters" },
+              ].map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-[13px] font-medium transition-colors"
+                  style={{ color: dark ? "rgba(255,255,255,0.7)" : DSU.midGray }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = dark ? "#fff" : DSU.navy; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = dark ? "rgba(255,255,255,0.7)" : DSU.midGray; }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </nav>
             <a href="/" className="group">
               <Button
                 variant="secondary"
-                className="!bg-transparent !border-white/25 !text-white transition-transform duration-200 hover:!bg-white hover:!text-[#004165] hover:!border-white group-hover:scale-[1.04]"
+                className={
+                  dark
+                    ? "!bg-transparent !border-white/25 !text-white transition-all duration-200 hover:!bg-white hover:!text-[#004165] hover:!border-white group-hover:scale-[1.04]"
+                    : "!bg-transparent !border-[#004165]/25 !text-[#004165] transition-all duration-200 hover:!bg-[#004165] hover:!text-white hover:!border-[#004165] group-hover:scale-[1.04]"
+                }
               >
                 <LogIn size={13} className="transition-transform duration-200 group-hover:-translate-x-0.5" /> Log In
               </Button>
@@ -699,10 +806,10 @@ export function LandingView() {
           product, not a stock photo. Full-bleed gradient/glow backdrop, sized
           to fill most of the first viewport — this is the one section that
           has to sell the product in under five seconds. */}
-      <section className="relative overflow-hidden flex items-center min-h-[75vh]">
+      <section ref={heroRef} className="relative overflow-hidden flex items-center min-h-[75vh]">
         <HeroBackdrop />
         <ParticleField />
-        <div className="relative w-full max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 py-14 sm:py-16">
+        <div className="relative z-10 w-full max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 py-14 sm:py-16">
           <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.3fr] gap-12 lg:gap-20 items-center">
             <Reveal>
               <h1
@@ -717,17 +824,17 @@ export function LandingView() {
                 No spreadsheet, no card box, no guessing.
               </p>
               <div className="flex items-center gap-3 mt-9 flex-wrap">
-                <a href="/">
+                <a href="/?mode=register">
                   <Button variant="primary" className="!px-6 !py-3 !text-[15px] !rounded-full">
                     Get Started <ArrowRight size={16} />
                   </Button>
                 </a>
-                <a href="/" className="group">
+                <a href="#contact" className="group">
                   <Button
                     variant="secondary"
-                    className="!px-6 !py-3 !text-[15px] !rounded-full !bg-transparent !border-white/25 !text-white transition-transform duration-200 hover:!bg-white hover:!text-[#004165] hover:!border-white group-hover:scale-[1.04]"
+                    className="!px-6 !py-3 !text-[15px] !rounded-full !bg-transparent !border-white/25 !text-white transition-all duration-200 hover:!bg-white hover:!text-[#004165] hover:!border-white group-hover:scale-[1.04]"
                   >
-                    <LogIn size={15} className="transition-transform duration-200 group-hover:-translate-x-0.5" /> Log In
+                    <Mail size={15} /> Contact Us
                   </Button>
                 </a>
               </div>
@@ -779,7 +886,7 @@ export function LandingView() {
       </div>
 
       {/* ── Features ── */}
-      <section id="features" className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 pt-14 sm:pt-16 pb-16 sm:pb-20 scroll-mt-16">
+      <section ref={featuresRef} id="features" className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 pt-14 sm:pt-16 pb-16 sm:pb-20 scroll-mt-16">
         <Reveal className="mb-12 pb-6 border-b text-center" style={{ borderColor: DSU.lightBorder }}>
           <h2
             className="text-[28px] sm:text-[34px] font-semibold leading-tight"
@@ -824,7 +931,7 @@ export function LandingView() {
           just three identical cards in a row. Flat navy, no hex tiling here;
           the texture is reserved for the header/hero/CTA so it doesn't turn
           into wallpaper. */}
-      <section id="how-it-works" className="relative scroll-mt-16" style={{ background: DSU.navyDark }}>
+      <section ref={howItWorksRef} id="how-it-works" className="relative scroll-mt-16" style={{ background: DSU.navyDark }}>
         <div className="relative max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 py-16 sm:py-24">
           <Reveal className="max-w-[560px] mb-16 sm:mb-20">
             <h2 className="text-[30px] sm:text-[38px] font-semibold leading-tight" style={{ fontFamily: DISPLAY, color: "#ffffff" }}>
@@ -865,7 +972,7 @@ export function LandingView() {
           navy sections back to back (how-it-works → this → CTA) would read
           as one undifferentiated slab, so this one flips to the page's base
           tone and swaps the icon-card grid for a plain divided list. */}
-      <section id="why-it-matters" className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 py-16 sm:py-24 scroll-mt-16">
+      <section ref={whyRef} id="why-it-matters" className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 py-16 sm:py-24 scroll-mt-16">
         <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-16">
           <Reveal direction="left" className="lg:sticky lg:top-24 self-start">
             <h2 className="text-[30px] sm:text-[38px] font-semibold leading-tight" style={{ fontFamily: DISPLAY, color: DSU.navy }}>
@@ -915,7 +1022,7 @@ export function LandingView() {
           Two back-to-back copies of the same list in one flex row, animated
           -50% so the loop is seamless; edges fade to the section's own
           background instead of a hard clip. */}
-      <section className="py-16 sm:py-20 overflow-hidden" style={{ background: DSU.navyDark }}>
+      <section ref={testimonialsRef} className="py-16 sm:py-20 overflow-hidden" style={{ background: DSU.navyDark }}>
         <div className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16">
           <Reveal className="mb-10 text-center">
             <h2 className="text-[26px] sm:text-[32px] font-semibold leading-tight" style={{ fontFamily: DISPLAY, color: "#ffffff" }}>
@@ -965,7 +1072,7 @@ export function LandingView() {
           since this is the page's actual close before it hands off to a
           plain contact form. Both actions from the hero repeat here so
           anyone who scrolled this far doesn't have to scroll back up. */}
-      <section className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 pt-16 sm:pt-20">
+      <section ref={ctaRef} className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 pt-16 sm:pt-20">
         <Reveal>
           <div
             className="group relative overflow-hidden text-center px-6 sm:px-10 py-10 sm:py-12 transition-transform duration-300 hover:-translate-y-1"
@@ -989,21 +1096,13 @@ export function LandingView() {
               Ready to stop guessing{" "}
               <span style={{ fontStyle: "italic", color: DSU.trojan }}>who has what?</span>
             </h2>
-            <p className="relative text-[14px] mt-3 max-w-[400px] mx-auto" style={{ color: "rgba(255,255,255,0.72)" }}>
-              Sign in with your facilities account and pick up right where your team left off.
+            <p className="relative text-[14px] mt-3 max-w-[500px] mx-auto" style={{ color: "rgba(255,255,255,0.72)" }}>
+              Contact us to get the access code, and start managing keys for your organization.
             </p>
             <div className="relative flex items-center justify-center gap-3 mt-6 flex-wrap">
-              <a href="/">
+              <a href="#contact">
                 <Button variant="primary" className="!px-6 !py-3 !text-[15px] !rounded-full">
                   Get Started <ArrowRight size={16} />
-                </Button>
-              </a>
-              <a href="/" className="group">
-                <Button
-                  variant="secondary"
-                  className="!px-6 !py-3 !text-[15px] !rounded-full !bg-transparent !border-white/25 !text-white transition-transform duration-200 hover:!bg-white hover:!text-[#004165] hover:!border-white group-hover:scale-[1.04]"
-                >
-                  <LogIn size={15} className="transition-transform duration-200 group-hover:-translate-x-0.5" /> Log In
                 </Button>
               </a>
             </div>
@@ -1016,7 +1115,7 @@ export function LandingView() {
       {/* ── Footer ── multi-column, on the same dark field as the CTA above
           it, so the two read as one closing unit instead of the page
           bouncing back to white right before it ends. */}
-      <footer className="mt-16 sm:mt-20" style={{ background: DSU.navyDark }}>
+      <footer ref={footerRef} className="mt-16 sm:mt-20" style={{ background: DSU.navyDark }}>
         <div className="max-w-[1680px] mx-auto px-6 sm:px-10 lg:px-16 pt-14 pb-8">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-6 pb-10">
             <div className="col-span-2 sm:col-span-1 pr-4">
@@ -1051,7 +1150,7 @@ export function LandingView() {
               </div>
               <ul className="flex flex-col gap-2.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
                 <li><a href="/" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Log In</a></li>
-                <li><a href="/" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Get Started</a></li>
+                <li><a href="/?mode=register" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Get Started</a></li>
               </ul>
             </div>
 
@@ -1070,7 +1169,7 @@ export function LandingView() {
             style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.45)" }}
           >
             <span>© {new Date().getFullYear()} Fipher Keys. All rights reserved.</span>
-            <span>Built for facilities & operations teams.</span>
+            <span>Built for teams managing physical access.</span>
           </div>
         </div>
       </footer>

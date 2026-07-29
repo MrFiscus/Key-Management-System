@@ -20,12 +20,13 @@ export const DSU = {
   tintText: "#00648f",
 };
 
-/** Type stacks, per the DSU Brand Manual's approved web fonts.
- *  `display` is Crimson Text (the web substitute for Arno Pro); `sans` is Roboto
- *  (official web body face); `mono` is Roboto Mono for stamps, codes and figures. */
+/** Type stack, matching the public /landing marketing page: one family,
+ *  IBM Plex Sans, carrying both headings and body copy so the app and the
+ *  site read as the same product. `mono` stays Roboto Mono for stamps,
+ *  codes and figures — a utility face, not a brand face. */
 export const font = {
-  display: "'Crimson Text', Georgia, serif",
-  sans: "'Roboto', system-ui, sans-serif",
+  display: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+  sans: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
   mono: "'Roboto Mono', ui-monospace, monospace",
 };
 /** Back-compat alias — older call sites import `serif`. */
