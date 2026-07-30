@@ -1,5 +1,8 @@
-import { useId, useMemo, useRef, useState } from "react";
-import { Users, ArrowUpRight, ArrowDownLeft, Search, Maximize2, Building2, Briefcase, PieChart, Plus, Undo2, KeyRound, Download } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Users, ArrowUpRight, ArrowDownLeft, Search, Maximize2, Building2, Briefcase, PieChart, Plus, Undo2,
+  KeyRound, Share2, Layers, SlidersHorizontal, X, ChevronLeft, ChevronRight, Check, GripVertical,
+} from "lucide-react";
 import type { KeyRecord, Snapshot } from "../../lib/types";
 import { DSU, formatDate, isStampQuery, radius, font, shadow } from "../theme";
 import { Avatar, Button, Modal, Stamp } from "../components/primitives";
@@ -54,6 +57,7 @@ export function DashboardView({
   const copiesOut = active.reduce((sum, r) => sum + r.numKeys, 0);
   const holders = new Set(active.map((r) => r.personId)).size;
   const buildings = new Set(active.map((r) => r.building).filter(Boolean)).size;
+  const departments = new Set(active.map((r) => r.department).filter(Boolean)).size;
 
   /** Keys more than one person currently holds — informational, not a problem. */
   const shared = useMemo(() => {
@@ -67,6 +71,63 @@ export function DashboardView({
       .filter((e) => e.holders.size > 1)
       .sort((a, b) => b.holders.size - a.holders.size);
   }, [active]);
+
+  // ── Customizable stat row ── the hero "Keys Out" tile is fixed; everything
+  // else is a pick-and-order list of cards, so the row can be tuned to
+  // whatever a given office actually cares to see at a glance. Order + which
+  // cards are shown persists per-browser, same footprint as the map layout.
+  const statDefs: Record<string, {
+    label: string; icon: React.ReactNode; badgeBg: string; value: number; onClick?: () => void;
+  }> = {
+    holders: { label: "Holders", icon: <Users size={16} />, badgeBg: DSU.navy, value: holders, onClick: () => onGoToTab("directory") },
+    catalog: { label: "Catalog", icon: <KeyRound size={16} />, badgeBg: DSU.trojan, value: snapshot.keys.length, onClick: () => onGoToTab("keys") },
+    buildings: { label: "Buildings", icon: <Building2 size={16} />, badgeBg: DSU.navy, value: buildings, onClick: () => onGoToTab("map") },
+    returned: { label: "Returned", icon: <Undo2 size={16} />, badgeBg: DSU.trojan, value: returned.length, onClick: () => onGoToTab("returned") },
+    departments: { label: "Departments", icon: <Briefcase size={16} />, badgeBg: DSU.navy, value: departments },
+    sharedKeys: { label: "Shared Keys", icon: <Share2 size={16} />, badgeBg: DSU.trojan, value: shared.length },
+    copiesOut: { label: "Copies Out", icon: <Layers size={16} />, badgeBg: DSU.navy, value: copiesOut },
+  };
+  const STAT_CARDS_KEY = "dsu-key-mgmt/dashboard-cards/v1";
+  const DEFAULT_CARD_ORDER = ["holders", "catalog", "buildings", "returned"];
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(STAT_CARDS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const ids = Array.isArray(parsed) ? parsed.filter((id) => id in statDefs) : null;
+      return ids && ids.length > 0 ? ids : DEFAULT_CARD_ORDER;
+    } catch {
+      return DEFAULT_CARD_ORDER;
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(STAT_CARDS_KEY, JSON.stringify(cardOrder));
+  }, [cardOrder]);
+  const [rearranging, setRearranging] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const availableToAdd = Object.keys(statDefs).filter((id) => !cardOrder.includes(id));
+
+  const removeCard = (id: string) => setCardOrder((o) => o.filter((c) => c !== id));
+  const addCard = (id: string) => { setCardOrder((o) => [...o, id]); setShowAddMenu(false); };
+  const moveCard = (index: number, dir: -1 | 1) => {
+    setCardOrder((o) => {
+      const next = [...o];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return next;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+  const moveCardTo = (from: number, to: number) => {
+    setCardOrder((o) => {
+      if (from === to || from < 0 || to < 0 || from >= o.length || to >= o.length) return o;
+      const next = [...o];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Full, sorted activity lists. The panels preview the first handful; the
   // expand popup shows the rest.
@@ -119,16 +180,22 @@ export function DashboardView({
 
   return (
     <div>
-      {/* ── Page header ── title + a real Export action (same export the Data
-          tab offers), matching the reference's masthead row. No fake period/
-          filter controls — nothing behind them to page. */}
+      {/* ── Page header ── title + a Rearrange toggle for the stat row below,
+          matching the reference's masthead row. No fake period/filter
+          controls — nothing behind them to page. */}
       {!empty && (
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <h1 className="text-[26px] font-semibold" style={{ fontFamily: font.display, color: DSU.navy }}>
             Dashboard
           </h1>
-          <Button onClick={onOpenData} className="!rounded-full !px-4">
-            <Download size={13} /> Export
+          <Button
+            onClick={() => { setRearranging((v) => !v); setShowAddMenu(false); }}
+            variant={rearranging ? "primary" : "secondary"}
+            style={rearranging ? { background: DSU.navy } : undefined}
+            className="!rounded-full !px-4"
+          >
+            {rearranging ? <Check size={13} /> : <SlidersHorizontal size={13} />}
+            {rearranging ? "Done" : "Rearrange"}
           </Button>
         </div>
       )}
@@ -144,49 +211,148 @@ export function DashboardView({
         </div>
       ) : (
         <>
-          {/* ── Stat row ── a solid-navy featured card (the headline number),
-              four white supporting cards, and a dashed "Add data" tile — same
-              size/card language throughout: circular icon badge + label on
-              top, big number below. */}
+          {/* ── Stat row ── a solid-navy featured card (the headline number,
+              fixed), a user-picked/ordered set of white supporting cards, and
+              a dashed "Add data" tile that opens a menu of the ones not
+              currently shown. Rearrange mode overlays remove + reorder
+              controls on each card without changing their everyday look. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
             <HeroStatCard
               icon={<ArrowUpRight size={16} />} label="Keys Out" value={active.length}
             />
 
-            <StatCard
-              icon={<Users size={16} />} badgeBg={DSU.navy}
-              label="Holders" value={holders} onClick={() => onGoToTab("directory")}
-            />
-            <StatCard
-              icon={<KeyRound size={16} />} badgeBg={DSU.trojan}
-              label="Catalog" value={snapshot.keys.length} onClick={() => onGoToTab("keys")}
-            />
-            <StatCard
-              icon={<Building2 size={16} />} badgeBg={DSU.navy}
-              label="Buildings" value={buildings} onClick={() => onGoToTab("map")}
-            />
-            <StatCard
-              icon={<Undo2 size={16} />} badgeBg={DSU.trojan}
-              label="Returned" value={returned.length} onClick={() => onGoToTab("returned")}
-            />
+            {cardOrder.map((id, index) => {
+              const def = statDefs[id];
+              if (!def) return null;
+              const dragging = dragIndex === index;
+              const dragOver = dragOverIndex === index && dragIndex !== null && dragIndex !== index;
+              return (
+                <div
+                  key={id}
+                  className="relative transition-opacity"
+                  draggable={rearranging}
+                  onDragStart={(e) => { setDragIndex(index); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragEnter={() => { if (rearranging && dragIndex !== null) setDragOverIndex(index); }}
+                  onDragOver={(e) => { if (rearranging) e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIndex !== null) moveCardTo(dragIndex, index);
+                    setDragIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                  style={{
+                    opacity: dragging ? 0.4 : 1,
+                    outline: dragOver ? `2px dashed ${DSU.trojan}` : "none",
+                    outlineOffset: 3,
+                    borderRadius: 20,
+                  }}
+                >
+                  <StatCard
+                    icon={def.icon} badgeBg={def.badgeBg} label={def.label} value={def.value}
+                    onClick={rearranging ? undefined : def.onClick}
+                  />
+                  {rearranging && (
+                    <>
+                      {/* Tints the card itself so the white/red control buttons
+                          sitting on top of it always have contrast, even over
+                          the plain white cards. */}
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ background: "rgba(0, 65, 101, 0.16)", borderRadius: 20 }}
+                      />
+                      <div
+                        className="absolute top-2.5 left-2.5 w-7 h-7 flex items-center justify-center rounded-full cursor-grab active:cursor-grabbing"
+                        style={{ background: "#fff", color: DSU.navy, boxShadow: shadow.md, border: `1px solid ${DSU.lightBorder}` }}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical size={14} />
+                      </div>
+                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => moveCard(index, -1)}
+                          disabled={index === 0}
+                          aria-label={`Move ${def.label} earlier`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full transition-colors disabled:opacity-30"
+                          style={{ background: "#fff", color: DSU.navy, boxShadow: shadow.md, border: `1px solid ${DSU.lightBorder}` }}
+                          onMouseEnter={(e) => { if (index !== 0) e.currentTarget.style.background = DSU.tintBg; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+                        >
+                          <ChevronLeft size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveCard(index, 1)}
+                          disabled={index === cardOrder.length - 1}
+                          aria-label={`Move ${def.label} later`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full transition-colors disabled:opacity-30"
+                          style={{ background: "#fff", color: DSU.navy, boxShadow: shadow.md, border: `1px solid ${DSU.lightBorder}` }}
+                          onMouseEnter={(e) => { if (index !== cardOrder.length - 1) e.currentTarget.style.background = DSU.tintBg; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+                        >
+                          <ChevronRight size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeCard(id)}
+                          aria-label={`Remove ${def.label}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                          style={{ background: DSU.danger, color: "#fff", boxShadow: shadow.md }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = DSU.dangerHover; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = DSU.danger; }}
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
-            {/* Real action, not decoration: goes straight to Settings' import flow. */}
-            <button
-              onClick={onOpenData}
-              className="p-5 flex flex-col items-center justify-center gap-2 text-center transition-colors"
-              style={{
-                borderRadius: 20,
-                border: `1.5px dashed ${DSU.lightBorder}`,
-                color: DSU.midGray,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = DSU.trojan; e.currentTarget.style.color = DSU.trojan; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = DSU.lightBorder; e.currentTarget.style.color = DSU.midGray; }}
-            >
-              <span className="inline-flex items-center justify-center rounded-full" style={{ width: 34, height: 34, background: DSU.tintBg }}>
-                <Plus size={16} />
-              </span>
-              <span className="text-[14px] font-medium">Add data</span>
-            </button>
+            {/* Add a card from the ones not currently shown; falls back to the
+                import flow once every card is already on the board. */}
+            <div className="relative">
+              <button
+                onClick={() => (availableToAdd.length > 0 ? setShowAddMenu((v) => !v) : onOpenData())}
+                className="p-5 w-full h-full flex flex-col items-center justify-center gap-2 text-center transition-colors"
+                style={{
+                  borderRadius: 20,
+                  border: `1.5px dashed ${DSU.lightBorder}`,
+                  color: DSU.midGray,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = DSU.trojan; e.currentTarget.style.color = DSU.trojan; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = DSU.lightBorder; e.currentTarget.style.color = DSU.midGray; }}
+              >
+                <span className="inline-flex items-center justify-center rounded-full" style={{ width: 34, height: 34, background: DSU.tintBg }}>
+                  <Plus size={16} />
+                </span>
+                <span className="text-[14px] font-medium">
+                  {availableToAdd.length > 0 ? "Add data" : "Import data"}
+                </span>
+              </button>
+
+              {showAddMenu && availableToAdd.length > 0 && (
+                <div
+                  className="absolute left-0 right-0 top-full mt-1.5 overflow-hidden z-20"
+                  style={{ background: "#fff", borderRadius: radius.lg, boxShadow: shadow.lg, border: `1px solid ${DSU.lightBorder}` }}
+                >
+                  {availableToAdd.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => addCard(id)}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-blue-50"
+                      style={{ color: DSU.navy }}
+                    >
+                      <IconBadge icon={statDefs[id].icon} bg={statDefs[id].badgeBg} fg="#fff" />
+                      {statDefs[id].label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Search + key actions — unchanged design/position, just no longer

@@ -122,19 +122,41 @@ export class SupabaseStore implements DataStore {
 
   constructor(private client: SupabaseClient = getSupabase()!) {}
 
-  async load(): Promise<Snapshot> {
-    const [people, keys, assignments] = await Promise.all([
-      this.client.from("people").select("*").order("full_name"),
-      this.client.from("keys").select("*").order("key_stamp"),
-      this.client.from("assignments").select("*"),
-    ]);
-    for (const res of [people, keys, assignments]) {
-      if (res.error) throw explain(res.error);
+  /**
+   * PostgREST caps how many rows a single request returns (commonly 1000),
+   * silently — no error, just a truncated result. A plain `.select("*")`
+   * on a table past that size quietly loses whatever didn't fit, which is
+   * exactly how an import can write every row correctly and still have the
+   * app show none of the tail end (e.g. every returned key, if those rows
+   * happened to be inserted last). Page through with `.range()` until a
+   * page comes back short of a full page, so the row cap can never apply.
+   */
+  private async loadAll(table: string, orderCol: string) {
+    const pageSize = 1000;
+    const rows: any[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.client
+        .from(table)
+        .select("*")
+        .order(orderCol)
+        .range(from, from + pageSize - 1);
+      if (error) throw explain(error);
+      rows.push(...(data ?? []));
+      if (!data || data.length < pageSize) break;
     }
+    return rows;
+  }
+
+  async load(): Promise<Snapshot> {
+    const [peopleRows, keyRows, assignmentRows] = await Promise.all([
+      this.loadAll("people", "full_name"),
+      this.loadAll("keys", "key_stamp"),
+      this.loadAll("assignments", "date_issued"),
+    ]);
     return {
-      people: (people.data ?? []).map(rowToPerson),
-      keys: (keys.data ?? []).map(rowToKey),
-      assignments: (assignments.data ?? []).map(rowToAssignment),
+      people: peopleRows.map(rowToPerson),
+      keys: keyRows.map(rowToKey),
+      assignments: assignmentRows.map(rowToAssignment),
     };
   }
 

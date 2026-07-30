@@ -155,6 +155,17 @@ export interface ImportReport {
   people: number;
   keys: number;
   assignments: number;
+  /** Rows on a sheet literally named "Returned" that had a key stamp but no
+   *  Date Returned value — imported as returned anyway, dated to the import,
+   *  since the sheet itself says the key is back even though the date wasn't
+   *  recorded. */
+  placeholderReturnDates: number;
+  /** Rows with a key stamp (or other data) but no person name — imported
+   *  under a unique per-row placeholder name instead of being dropped. */
+  placeholderPersonNames: number;
+  /** Rows where Date Returned was earlier than Date Issued — kept as an open
+   *  (still-active) assignment instead of being dropped entirely. */
+  droppedBadReturnDates: number;
 }
 
 export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; report: ImportReport }> {
@@ -170,7 +181,8 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
 
   const report: ImportReport = {
     sheetsRead: [], perSheet: [], sheetsSkipped: [], unmappedHeaders: [], rowsRead: 0,
-    rowsSkipped: [], people: 0, keys: 0, assignments: 0,
+    rowsSkipped: [], people: 0, keys: 0, assignments: 0, placeholderReturnDates: 0,
+    placeholderPersonNames: 0, droppedBadReturnDates: 0,
   };
 
   const snap: Snapshot = { people: [], keys: [], assignments: [] };
@@ -214,34 +226,69 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
       const single = text(col(row, "personName"));
       const first = text(col(row, "firstName"));
       const last = text(col(row, "lastName"));
-      const personName = single || [first, last].filter(Boolean).join(" ").trim();
+      let personName = single || [first, last].filter(Boolean).join(" ").trim();
       const keyStamp = text(col(row, "keyStamp"));
-      if (!personName && !keyStamp) continue; // blank spacer row
 
+      const department = text(col(row, "department")) || null;
+      const explicitBuilding = text(col(row, "building")) || null;
+      const roomNumber = text(col(row, "roomNumber")) || null;
+      const roomDescription = text(col(row, "roomDescription")) || null;
+      const rawDateIssued = col(row, "dateIssued");
+      const rawDateReturned = col(row, "dateReturned");
+      const rawNotes = text(col(row, "notes"));
+
+      // Only a truly empty row (nothing in any column this importer
+      // recognizes) gets dropped — anything else is imported, with a
+      // placeholder standing in for whatever piece is missing, rather than
+      // silently losing a row just because one field wasn't filled in.
+      // Deliberately checks explicitBuilding, not the sheet-name-guessed
+      // fallback below — that fallback is non-empty for every sheet, which
+      // would make this check useless and let Excel's trailing padding rows
+      // (formatted but otherwise empty, often hundreds past the real data)
+      // get imported as fake people.
+      const hasAnyData = Boolean(
+        personName || keyStamp || department || explicitBuilding || roomNumber || roomDescription
+        || rawDateIssued || rawDateReturned || rawNotes,
+      );
+      if (!hasAnyData) continue; // blank spacer row
+
+      // Sheets are often named after the building with no building column.
+      const building = explicitBuilding || guessBuilding(sheet.name);
+
+      let namePlaceholder = false;
       if (!personName) {
-        report.rowsSkipped.push({ sheet: sheet.name, row: rowNum, reason: "no person name" });
-        continue;
+        // Kept unique per row rather than one shared "Unknown" — otherwise
+        // every nameless row would merge into a single person record.
+        personName = `Unknown Person (${sheet.name} row ${rowNum})`;
+        namePlaceholder = true;
+        report.placeholderPersonNames++;
       }
-      // Import any row with a person, even if they have no key assignment yet.
-      // Only skip if there's no person name at all (truly empty row).
 
       // Date issued can be empty; use epoch date as placeholder for data entry gaps.
-      const dateIssued = toIsoDate(col(row, "dateIssued")) || "1900-01-01";
-      const dateReturned = toIsoDate(col(row, "dateReturned"));
+      const dateIssued = toIsoDate(rawDateIssued) || "1900-01-01";
+      let dateReturned = toIsoDate(rawDateReturned);
+      // A row that lives on a sheet literally named "Returned" is asserting
+      // the key is back even when the actual date wasn't recorded — treat it
+      // as returned (dated to the import) rather than leaving it looking
+      // like it's still checked out, which is what a blank date would
+      // otherwise mean everywhere else in the workbook.
+      let placeholderReturn = false;
+      if (!dateReturned && keyStamp && /^returned$/i.test(sheet.name.trim())) {
+        dateReturned = todayIso();
+        placeholderReturn = true;
+        report.placeholderReturnDates++;
+      }
+      // An impossible pair (returned before it was issued) is a data-entry
+      // error, not a reason to drop the whole row — keep the row and the
+      // issue date, and treat the bad return date as not recorded instead.
+      let droppedBadReturnDate = false;
       if (dateReturned && dateReturned < dateIssued) {
-        report.rowsSkipped.push({
-          sheet: sheet.name, row: rowNum, reason: "date returned is before date issued",
-        });
-        continue;
+        dateReturned = null;
+        droppedBadReturnDate = true;
+        report.droppedBadReturnDates++;
       }
 
       // Import any stamp as-is, even if it looks odd. User can clean up data later in the UI.
-
-      const department = text(col(row, "department")) || null;
-      // Sheets are often named after the building with no building column.
-      const building = text(col(row, "building")) || guessBuilding(sheet.name);
-      const roomNumber = text(col(row, "roomNumber")) || null;
-      const roomDescription = text(col(row, "roomDescription")) || null;
 
       // person — always create or reuse
       const pKey = personName.toLowerCase();
@@ -278,6 +325,11 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
           });
         }
 
+        const flags: string[] = [];
+        if (placeholderReturn) flags.push("Return date not recorded in source spreadsheet — dated to import.");
+        if (droppedBadReturnDate) flags.push("Source spreadsheet had a return date earlier than the issue date — dropped, left as still out.");
+        if (namePlaceholder) flags.push("No person name in source spreadsheet.");
+        const importedNote = text(col(row, "notes")) || null;
         snap.assignments.push({
           id: newId(),
           personId,
@@ -285,7 +337,7 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
           dateIssued,
           dateReturned,
           numKeys: toCount(col(row, "numKeys")),
-          notes: text(col(row, "notes")) || null,
+          notes: [importedNote, ...flags].filter(Boolean).join(" ") || null,
         });
       }
       report.rowsRead++;
@@ -301,20 +353,66 @@ export async function parseWorkbook(file: File): Promise<{ snapshot: Snapshot; r
   }
 
   // Same person + same key + same issue date twice = the same real-world event
-  // recorded in two sheets. Collapse it, otherwise every record double-counts.
-  const seen = new Set<string>();
+  // recorded in two sheets — commonly the original category sheet (still
+  // showing it open) and the Returned sheet (with the actual return date
+  // filled in). Collapse to one row, but when the two disagree, keep whichever
+  // one is CLOSED: silently preferring the first-seen copy would drop real
+  // returns any time the source data left the old open row in place instead of
+  // deleting it once the key came back.
+  const seenAt = new Map<string, number>();
   const before = snap.assignments.length;
-  snap.assignments = snap.assignments.filter((a) => {
+  const deduped: typeof snap.assignments = [];
+  for (const a of snap.assignments) {
     const sig = `${a.personId}|${a.keyId}|${a.dateIssued}`;
-    if (seen.has(sig)) return false;
-    seen.add(sig);
-    return true;
-  });
-  const deduped = before - snap.assignments.length;
-  if (deduped > 0) {
+    const existingIndex = seenAt.get(sig);
+    if (existingIndex === undefined) {
+      seenAt.set(sig, deduped.length);
+      deduped.push(a);
+      continue;
+    }
+    if (a.dateReturned && !deduped[existingIndex].dateReturned) {
+      deduped[existingIndex] = a;
+    }
+  }
+  snap.assignments = deduped;
+  const dedupedCount = before - snap.assignments.length;
+  if (dedupedCount > 0) {
     report.rowsSkipped.push({
       sheet: "(all)", row: 0,
-      reason: `${deduped} duplicate row${deduped === 1 ? "" : "s"} collapsed (same person, key, and issue date)`,
+      reason: `${dedupedCount} duplicate row${dedupedCount === 1 ? "" : "s"} collapsed (same person, key, and issue date)`,
+    });
+  }
+
+  // A person can only hold one OPEN copy of a given key at a time (the DB
+  // enforces this). Real spreadsheets sometimes carry an old checkout that
+  // was never marked returned alongside a newer reissue of the same stamp to
+  // the same person — keep the most recent issuance and drop the stale one,
+  // rather than letting a bulk import silently violate that constraint and
+  // abort partway through (which can leave later data, like everything on
+  // the Returned sheet, never written at all).
+  const openIndexByPair = new Map<string, number>();
+  const staleOpenIndexes = new Set<number>();
+  snap.assignments.forEach((a, i) => {
+    if (a.dateReturned !== null) return;
+    const pairKey = `${a.personId}|${a.keyId}`;
+    const existingIndex = openIndexByPair.get(pairKey);
+    if (existingIndex === undefined) {
+      openIndexByPair.set(pairKey, i);
+      return;
+    }
+    const existing = snap.assignments[existingIndex];
+    if (a.dateIssued > existing.dateIssued) {
+      staleOpenIndexes.add(existingIndex);
+      openIndexByPair.set(pairKey, i);
+    } else {
+      staleOpenIndexes.add(i);
+    }
+  });
+  if (staleOpenIndexes.size > 0) {
+    snap.assignments = snap.assignments.filter((_, i) => !staleOpenIndexes.has(i));
+    report.rowsSkipped.push({
+      sheet: "(all)", row: 0,
+      reason: `${staleOpenIndexes.size} older still-open duplicate${staleOpenIndexes.size === 1 ? "" : "s"} collapsed (same person already has a more recent, still-open checkout of that key)`,
     });
   }
 
@@ -406,6 +504,8 @@ function toIsoDate(v: unknown): string | null {
 
 /** Format in UTC — using local getters here shifts dates a day west of GMT. */
 const isoFromUTC = (d: Date) => d.toISOString().slice(0, 10);
+
+const todayIso = () => isoFromUTC(new Date());
 
 function toCount(v: unknown): number {
   const n = typeof v === "number" ? v : parseInt(text(v), 10);

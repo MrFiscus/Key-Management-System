@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   Download, Upload, AlertTriangle, Database, HardDrive, FileSpreadsheet, CheckCircle2, Lock, GitMerge, RefreshCw,
+  ChevronDown, Users, KeyRound,
 } from "lucide-react";
 import type { DataStore, Snapshot } from "../../lib/types";
 import { buildWorkbook, downloadWorkbook, mergeSnapshots, parseWorkbook, type ImportReport } from "../../lib/excel";
@@ -339,10 +340,10 @@ function ImportPreview({
         Read <strong>{name}</strong>.
       </p>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <Stat label="Records" value={report.assignments} />
-        <Stat label="People" value={report.people} />
-        <Stat label="Keys" value={report.keys} />
+      <div className="grid grid-cols-3 gap-3 mb-4 p-3 rounded-xl" style={{ background: DSU.gray }}>
+        <Stat label="Records" value={report.assignments} icon={<FileSpreadsheet size={14} />} badgeBg={DSU.navy} />
+        <Stat label="People" value={report.people} icon={<Users size={14} />} badgeBg={DSU.trojan} />
+        <Stat label="Keys" value={report.keys} icon={<KeyRound size={14} />} badgeBg={DSU.navy} />
       </div>
 
       {/* ── Mode picker ── the two ways this import can land, chosen before
@@ -382,37 +383,24 @@ function ImportPreview({
         </button>
       </div>
 
-      {mode === "replace" ? (
+      {mode === "replace" && (
         <div
           className="flex items-start gap-3 px-4 py-3 rounded-lg mb-4"
           style={{ background: "#fdeceb", border: `1.5px solid ${DSU.danger}` }}
         >
-          <AlertTriangle size={22} style={{ flexShrink: 0, color: DSU.danger }} />
+          <AlertTriangle size={20} style={{ flexShrink: 0, color: DSU.danger }} />
           <div>
-            <div className="text-[14px] font-bold" style={{ color: DSU.danger }}>
-              This permanently deletes all {existing} existing record{existing === 1 ? "" : "s"}
+            <div className="text-[13.5px] font-bold" style={{ color: DSU.danger }}>
+              Deletes all {existing} existing record{existing === 1 ? "" : "s"} — cannot be undone
             </div>
-            <p className="text-[12.5px] mt-1 leading-relaxed" style={{ color: "#7a2620" }}>
-              Every person, key, and issuance currently on file is erased and replaced with only the{" "}
-              {report.assignments} records from this file. <strong>This cannot be undone.</strong> Export a backup
-              first if you haven't, or choose "Merge" instead to keep what's already here.
+            <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: "#7a2620" }}>
+              Export a backup first if you're not sure, or choose Merge instead.
             </p>
           </div>
         </div>
-      ) : existing > 0 && (
-        <div
-          className="flex items-start gap-2 px-3 py-2 rounded border mb-4 text-[12px]"
-          style={{ background: "#eaf6fc", borderColor: DSU.tintBorder, color: DSU.tintText }}
-        >
-          <GitMerge size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>
-            The {existing} record{existing === 1 ? "" : "s"} already stored are kept. Only new people, keys, and
-            issuances from this file are added.
-          </span>
-        </div>
       )}
 
-      <Detail title={`Sheets read (${report.sheetsRead.length})`}>
+      <Detail title={`${report.sheetsRead.length} sheets read`} defaultOpen>
         {report.perSheet.length === 0 ? (
           "none"
         ) : (
@@ -431,34 +419,36 @@ function ImportPreview({
         )}
       </Detail>
 
-      {report.sheetsSkipped.length > 0 && (
-        <Detail title={`Sheets skipped (${report.sheetsSkipped.length})`} warn>
-          <ul className="list-disc pl-4">
+      {(report.sheetsSkipped.length > 0
+        || report.placeholderReturnDates > 0
+        || report.placeholderPersonNames > 0
+        || report.droppedBadReturnDates > 0
+        || report.rowsSkipped.length > 0) && (
+        <Detail title="A few things were cleaned up along the way" warn>
+          <ul className="list-disc pl-4 space-y-1">
             {report.sheetsSkipped.map((s) => (
-              <li key={s.name}><strong>{s.name}</strong> — {s.reason}</li>
+              <li key={s.name}><strong>{s.name}</strong> sheet skipped — {s.reason}</li>
             ))}
-          </ul>
-        </Detail>
-      )}
-
-      {report.rowsSkipped.length > 0 && (
-        <Detail title={`Rows skipped (${report.rowsSkipped.length})`} warn>
-          <ul className="list-disc pl-4 max-h-[160px] overflow-y-auto">
-            {report.rowsSkipped.slice(0, 50).map((r, i) => (
-              <li key={i}>
-                {r.row > 0 ? <>{r.sheet} row {r.row} — </> : null}{r.reason}
-              </li>
+            {report.placeholderReturnDates > 0 && (
+              <li>{report.placeholderReturnDates} returned key{report.placeholderReturnDates === 1 ? "" : "s"} had no return date on file — dated to today.</li>
+            )}
+            {report.placeholderPersonNames > 0 && (
+              <li>{report.placeholderPersonNames} row{report.placeholderPersonNames === 1 ? "" : "s"} had no person name — given a placeholder name to keep the record.</li>
+            )}
+            {report.droppedBadReturnDates > 0 && (
+              <li>{report.droppedBadReturnDates} return date{report.droppedBadReturnDates === 1 ? "" : "s"} came before the issue date — cleared, left as still out.</li>
+            )}
+            {report.rowsSkipped.map((r, i) => (
+              <li key={i}>{r.reason}</li>
             ))}
-            {report.rowsSkipped.length > 50 && <li>…and {report.rowsSkipped.length - 50} more</li>}
           </ul>
         </Detail>
       )}
 
       {report.unmappedHeaders.length > 0 && (
-        <Detail title={`Columns not recognized (${report.unmappedHeaders.length})`}>
+        <Detail title={`${report.unmappedHeaders.length} columns not recognized`}>
           <span style={{ color: DSU.midGray }}>
-            These columns were ignored: {report.unmappedHeaders.join(", ")}. If one of them holds data
-            you need, tell me the heading and I'll add it.
+            Ignored: {report.unmappedHeaders.join(", ")}. Tell me the heading if one of these holds data you need.
           </span>
         </Detail>
       )}
@@ -528,22 +518,54 @@ function ReauthModal({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+/** Same card recipe as the Dashboard's stat tiles — white, generously
+ *  rounded, soft shadow, circular icon badge + label on top, big number
+ *  below — so this reads as the same product instead of a different UI. */
+function Stat({ label, value, icon, badgeBg }: { label: string; value: number; icon: React.ReactNode; badgeBg: string }) {
   return (
-    <div className="border rounded p-2.5" style={{ borderColor: DSU.lightBorder, borderLeftWidth: 3, borderLeftColor: DSU.trojan }}>
-      <div className="text-[22px] font-bold leading-none tabular" style={{ color: DSU.navy }}>{value.toLocaleString()}</div>
-      <div className="text-[11px] mt-0.5" style={{ color: DSU.midGray }}>{label}</div>
+    <div className="p-3.5" style={{ background: "#fff", borderRadius: 16, boxShadow: shadow.sm }}>
+      <div className="flex items-start justify-between mb-2.5">
+        <span className="text-[12.5px] font-medium" style={{ color: DSU.midGray }}>{label}</span>
+        <span
+          className="inline-flex items-center justify-center rounded-full shrink-0"
+          style={{ width: 26, height: 26, background: badgeBg, color: "#fff" }}
+        >
+          {icon}
+        </span>
+      </div>
+      <div className="text-[26px] font-bold leading-none tabular" style={{ color: DSU.navy }}>{value.toLocaleString()}</div>
     </div>
   );
 }
 
-function Detail({ title, children, warn }: { title: string; children: React.ReactNode; warn?: boolean }) {
+/** Collapsed by default — a scannable one-line summary, with the full
+ *  explanation only a click away. Keeps an import report from reading like a
+ *  wall of text when most of these are "good to know," not "needs action". */
+function Detail({
+  title, children, warn, defaultOpen = false,
+}: {
+  title: string; children: React.ReactNode; warn?: boolean; defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mb-3">
-      <div className="text-[12px] font-semibold mb-1" style={{ color: warn ? "#9a7d1f" : DSU.navy }}>
+    <div
+      className="mb-2 rounded-md overflow-hidden"
+      style={{ border: `1px solid ${warn ? "#f0dfa8" : DSU.lightBorder}`, background: warn ? "#fffcf5" : "#fafbfc" }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-[12.5px] font-medium transition-colors"
+        style={{ color: warn ? "#9a7d1f" : DSU.navy }}
+      >
         {title}
-      </div>
-      <div className="text-[12px] leading-relaxed" style={{ color: DSU.darkGray }}>{children}</div>
+        <ChevronDown size={14} className="shrink-0 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }} />
+      </button>
+      {open && (
+        <div className="px-3 pb-2.5 text-[12px] leading-relaxed" style={{ color: DSU.darkGray }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
