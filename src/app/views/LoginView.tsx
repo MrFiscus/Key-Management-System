@@ -101,7 +101,7 @@ export function LoginView() {
           style={{ background: "#fff", fontFamily: font.sans }}
         >
         <div className="w-full max-w-[400px]">
-          <a href="/landing" className="flex items-center gap-3 mb-10">
+          <a href="/" className="flex items-center gap-3 mb-10">
             <div className="flex items-center justify-center w-10 h-10 overflow-hidden flex-shrink-0" style={{ background: DSU.tintBg, borderRadius: radius.sm }}>
               <img src="/logo.png" alt="" className="w-full h-full object-cover" />
             </div>

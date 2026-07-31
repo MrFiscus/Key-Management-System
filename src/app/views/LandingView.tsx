@@ -641,9 +641,9 @@ function HeroImageStack() {
 }
 
 /**
- * Public marketing page, shown before sign-in — reachable at /landing without
- * touching the authenticated app or its routing. "Log In" / "Get Started"
- * both send visitors to "/", where the existing session check takes over
+ * Public marketing page — owns "/", the site's front door, kept separate
+ * from the authenticated app's own routing. "Log In" / "Get Started" both
+ * send visitors to "/app", where the existing session check takes over
  * (LoginView if signed out, the app itself if already signed in).
  */
 export function LandingView() {
@@ -732,7 +732,7 @@ export function LandingView() {
         <div className="relative">
           <div className="relative w-full px-6 sm:px-10 lg:px-16 min-h-[52px] flex items-center gap-3 py-2 max-w-[1680px] mx-auto">
             <a
-              href="/landing"
+              href="/"
               onMouseEnter={() => setWordmarkHover(true)}
               onMouseLeave={() => setWordmarkHover(false)}
               className="flex items-center gap-2 flex-shrink-0"
@@ -785,7 +785,7 @@ export function LandingView() {
                 </a>
               ))}
             </nav>
-            <a href="/" className="group">
+            <a href="/app" className="group">
               <Button
                 variant="secondary"
                 className={
@@ -824,7 +824,7 @@ export function LandingView() {
                 No spreadsheet, no card box, no guessing.
               </p>
               <div className="flex items-center gap-3 mt-9 flex-wrap">
-                <a href="/?mode=register">
+                <a href="/app?mode=register">
                   <Button variant="primary" className="!px-6 !py-3 !text-[15px] !rounded-full">
                     Get Started <ArrowRight size={16} />
                   </Button>
@@ -1149,8 +1149,8 @@ export function LandingView() {
                 Account
               </div>
               <ul className="flex flex-col gap-2.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
-                <li><a href="/" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Log In</a></li>
-                <li><a href="/?mode=register" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Get Started</a></li>
+                <li><a href="/app" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Log In</a></li>
+                <li><a href="/app?mode=register" className="hover:text-white hover:underline underline-offset-4 decoration-[#00A9E0] transition-colors">Get Started</a></li>
               </ul>
             </div>
 

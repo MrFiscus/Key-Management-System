@@ -95,7 +95,7 @@ export default function App() {
     await getSupabase()?.auth.signOut();
     // Full navigation (not client-side state) since main.tsx picks LandingView
     // vs. App purely off window.location.pathname at load time.
-    window.location.href = "/landing";
+    window.location.href = "/";
   };
 
   /** Re-checks the current password before letting a full export proceed —

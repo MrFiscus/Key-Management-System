@@ -4,9 +4,9 @@
   import { LandingView } from "./app/views/LandingView.tsx";
   import "./styles/index.css";
 
-  // Public marketing page at /landing, kept separate from the authenticated
-  // app's own internal navigation — everything else still boots straight
-  // into App, unchanged.
-  const isLanding = window.location.pathname.replace(/\/+$/, "") === "/landing";
+  // The public marketing page is the site's front door — it owns "/". The
+  // authenticated app (and its own login gate) lives at /app, kept separate
+  // from the landing page's own navigation.
+  const isApp = window.location.pathname.replace(/\/+$/, "") === "/app";
 
-  createRoot(document.getElementById("root")!).render(isLanding ? <LandingView /> : <App />);
+  createRoot(document.getElementById("root")!).render(isApp ? <App /> : <LandingView />);
