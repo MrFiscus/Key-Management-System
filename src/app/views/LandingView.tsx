@@ -608,7 +608,7 @@ function HeroImageStack() {
           alone. Pulled further out past the main shot's edge so the whole
           stack reads bigger. */}
       <div
-        className="hidden sm:block absolute transition-transform duration-300"
+        className="block absolute transition-transform duration-300"
         style={{
           width: "58%", bottom: 0, left: "-10%",
           transform: `rotate(-4deg) scale(${hovered ? 1.06 : 1})`,
@@ -624,7 +624,7 @@ function HeroImageStack() {
           stack reads as "one system, several screens" rather than a single
           hero mockup with one decorative echo. */}
       <div
-        className="hidden sm:block absolute transition-transform duration-300"
+        className="block absolute transition-transform duration-300"
         style={{
           width: "46%", top: 0, right: "-10%",
           transform: `rotate(5deg) scale(${hovered ? 1.06 : 1})`,
@@ -864,7 +864,7 @@ export function LandingView() {
             {HIGHLIGHTS.map((h, i) => (
               <div
                 key={h.label}
-                className="group relative overflow-hidden flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-200 cursor-default"
+                className="group relative overflow-hidden flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-2 sm:gap-3 px-2.5 py-3.5 sm:px-3 sm:py-3 rounded-2xl transition-all duration-200 cursor-default"
                 style={{ background: i % 2 === 0 ? "#f3f9fc" : "#fef4ec" }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = shadow.md; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
@@ -873,12 +873,12 @@ export function LandingView() {
                   <HexWatermark />
                 </div>
                 <span
-                  className="relative inline-flex items-center justify-center rounded-xl shrink-0 transition-transform duration-200 group-hover:rotate-6"
-                  style={{ width: 44, height: 44, background: i % 2 === 0 ? DSU.navy : DSU.trojan, color: "#fff" }}
+                  className="relative inline-flex items-center justify-center rounded-xl shrink-0 w-9 h-9 sm:w-11 sm:h-11 transition-transform duration-200 group-hover:rotate-6"
+                  style={{ background: i % 2 === 0 ? DSU.navy : DSU.trojan, color: "#fff" }}
                 >
                   {h.icon}
                 </span>
-                <span className="relative text-[13px] font-semibold leading-snug" style={{ color: DSU.darkGray }}>{h.label}</span>
+                <span className="relative text-[12px] sm:text-[13px] font-semibold leading-snug" style={{ color: DSU.darkGray }}>{h.label}</span>
               </div>
             ))}
           </div>
